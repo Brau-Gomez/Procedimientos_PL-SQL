@@ -1,16 +1,43 @@
-# Credenciales de MongoDB Atlas (sensibles, nunca versionar)
-docs/eva3/atlas-credentials.env
+# ------------------------------------------------------------------
+# Credenciales: NUNCA se versionan
+# ------------------------------------------------------------------
+# El .env real con las contrasenas de Oracle y Atlas.
+.env
 *.env
 
+
+# La plantilla .env.example SI se versiona: es la referencia de que
+# variables hacen falta, sin ningun secreto.
+!.env.example
+
+# El script de creacion de usuarios lleva la contrasena real del
+# usuario ADMIN_PROYECTO, La version sin
+# secreto es Kopera/procedimiento_pl-sql/CreacionUsuarios.sql.example.
+Kopera/procedimiento_pl-sql/sql_scripts/CreacionUsuarios.sql
+
+
+# ------------------------------------------------------------------
 # Entorno virtual de Python
+# ------------------------------------------------------------------
 .venv/
 venv/
 
+# ------------------------------------------------------------------
 # Cache de Python
+# ------------------------------------------------------------------
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
+# ------------------------------------------------------------------
 # Sistema operativo / editores
+# ------------------------------------------------------------------
 .DS_Store
 .vscode/
 .idea/
+
+# ------------------------------------------------------------------
+# Documentos de la evaluacion: NO se versionan
+# PDF, DOCX, PPTX, ZIP y guias quedan solo en local.
+# ------------------------------------------------------------------
+docs/
