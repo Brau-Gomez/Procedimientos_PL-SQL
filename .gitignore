@@ -1,2 +1,16 @@
-#Elementos
-docs/*
+# Credenciales de MongoDB Atlas (sensibles, nunca versionar)
+docs/eva3/atlas-credentials.env
+*.env
+
+# Entorno virtual de Python
+.venv/
+venv/
+
+# Cache de Python
+__pycache__/
+*.py[cod]
+
+# Sistema operativo / editores
+.DS_Store
+.vscode/
+.idea/
