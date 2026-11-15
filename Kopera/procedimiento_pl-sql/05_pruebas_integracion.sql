@@ -1,8 +1,4 @@
-/*
-  Pruebas de integración sin dejar cambios permanentes.
-  Prerrequisitos: ejecutar 01, 02, 03 y 04; habilitar DBMS_OUTPUT.
-  Los SAVEPOINT/ROLLBACK protegen datos; no invocar sp_registra_pago porque hoy confirma con COMMIT.
-*/
+
 SET SERVEROUTPUT ON SIZE UNLIMITED;
 DECLARE
   v_credito NUMBER; v_cuota NUMBER; v_pagado NUMBER; v_valor NUMBER;

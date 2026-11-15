@@ -1,9 +1,6 @@
 /* ================================================================
    PROYECTO KOPERA - ENTREGA EVALUACIÓN PARCIAL 2 (BDY1103 - 004D)
    Script  : 01_tablas_apoyo.sql
-   Equipo  : Braulio Gomez - Lukas Meza - Maximiliano Mella
-   Responsable según guía : Maximiliano Mella
-   Fecha   : 18/10/2026
    ----------------------------------------------------------------
    PROPÓSITO
      Crear la tabla de apoyo BITACORA_PAGO_CUOTA, que servirá de

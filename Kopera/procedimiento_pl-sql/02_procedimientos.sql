@@ -1,17 +1,11 @@
 /* ================================================================
    PROYECTO KOPERA - EVALUACIÓN PARCIAL 2 (BDY1103)
    Script  : 02_procedimientos.sql
-   Autores : Braulio Gomez - Lukas Meza - Maximiliano Mella
-   Fecha   : 06/10/2026
    --------------------------------------------------------------
    Propósito: implementar PROCEDIMIENTOS ALMACENADOS con y sin
    parámetros que procesen la información masiva de la cartera de
    créditos de KOPERA, y que puedan ser invocados desde otros
    programas PL/SQL y desde sentencias SQL (CALL / EXECUTE).
-
-   Requisitos cubiertos (rúbrica Eva 2):
-     - IE2.1.1: procedimiento SIN parámetros  -> sp_reporte_cartera
-     - IE2.1.1: procedimiento CON parámetros  -> sp_registra_pago
    ================================================================ */
 
 SET SERVEROUTPUT ON;
@@ -306,7 +300,6 @@ END sp_registra_pago;
    NOTA: la prueba 2 MODIFICA los datos. Para volver al estado
    original re-ejecuta BD_KOPERA.SQL.
    ================================================================ */
- SAVEPOINT prueba_demostracion_pago;
  DECLARE
     v_mensaje     VARCHAR2(300);
     v_nuevo_saldo NUMBER;
@@ -337,7 +330,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Prueba monto invalido: ' || v_mensaje);
 END;
 /
-ROLLBACK TO prueba_demostracion_pago; -- deshace solo el pago de demostración.
+COMMIT;  -- confirma los cambios de la prueba 2
 
 /* ----------------------------------------------------------------
    USO DESDE SENTENCIA SQL (SQL*Plus / SQL Developer):
