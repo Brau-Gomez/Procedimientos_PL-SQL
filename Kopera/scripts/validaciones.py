@@ -55,9 +55,6 @@ CODIGO_ERROR_NO_EXISTE = -20014
 
 TIPOS_MOVIMIENTO_VALIDOS = ("ABONO", "RESCATE")
 
-# Separador de los mensajes de error, para que el informe los compare.
-PREFIJO_ERROR = "ORA"
-
 
 @dataclass
 class ResultadoValidacion:

@@ -26,6 +26,7 @@ Uso:
 
 import argparse
 from datetime import datetime
+from typing import NamedTuple
 
 import oracledb
 
@@ -38,6 +39,23 @@ from plan_pagos import FORMAS_PAGO, PLAN_PAGOS
 TAMANO_MENSAJE = 300
 
 
+class EstadoCuota(NamedTuple):
+    """
+    Estado de una cuota de credito tal como esta en la base.
+
+    Se usa un NamedTuple en vez de una tupla suelta porque el desempaquetado
+    posicional es fragile: si la consulta cambia el orden de las columnas, el
+    codigo sigue compilando y el error aparece en ejecucion. Con los campos
+    con nombre, el acceso es explicito y no depende del orden.
+    """
+
+    valor_cuota: float
+    monto_pagado: float
+    saldo_por_pagar: float
+    fecha_pago: str
+    nro_cliente: int
+
+
 def obtener_formas_pago(cursor):
     """Lee los nombres de las formas de pago desde FORMA_PAGO (fuente unica)."""
     cursor.execute("SELECT cod_forma_pago, nombre_forma_pago FROM forma_pago ORDER BY 1")
@@ -46,8 +64,7 @@ def obtener_formas_pago(cursor):
 
 def leer_estado_cuota(cursor, credito, cuota):
     """
-    Devuelve el estado actual de una cuota:
-    (valor_cuota, monto_pagado, saldo_por_pagar, fecha_pago, cliente_dueno)
+    Devuelve el estado actual de una cuota como EstadoCuota,
     o None si la cuota no existe.
     """
     cursor.execute("""
@@ -62,7 +79,10 @@ def leer_estado_cuota(cursor, credito, cuota):
          WHERE cu.nro_solic_credito = :1
            AND cu.nro_cuota = :2
     """, [credito, cuota])
-    return cursor.fetchone()
+    fila = cursor.fetchone()
+    if fila is None:
+        return None
+    return EstadoCuota(*fila)
 
 
 def validar_plan(cursor):
@@ -94,7 +114,9 @@ def validar_plan(cursor):
             )
             continue
 
-        valor_cuota, monto_pagado, _, _, cliente_real = estado
+        valor_cuota = estado.valor_cuota
+        monto_pagado = estado.monto_pagado
+        cliente_real = estado.nro_cliente
 
         if cliente_real != evento["nro_cliente"]:
             problemas.append(
@@ -167,7 +189,9 @@ def ejecutar_lote(cursor, simular):
             error = f"Credito {credito} cuota {cuota}: la cuota no existe"
             break
 
-        monto_pagado, _, fecha_pago, _ = estado
+        # El estado se lee por nombre: ver la nota de EstadoCuota.
+        monto_pagado = estado.monto_pagado
+        fecha_pago = estado.fecha_pago
 
         # En simulacion manda el estado acumulado en memoria, no el de la base.
         if simular and clave in acumulado_simulado:
@@ -219,7 +243,9 @@ def ejecutar_lote(cursor, simular):
             error = f"Credito {credito} cuota {cuota}: la cuota desaparecio tras el pago"
             break
 
-        _, pagado_final, saldo_final, fecha_pago_final, _ = estado_final
+        pagado_final = estado_final.monto_pagado
+        saldo_final = estado_final.saldo_por_pagar
+        fecha_pago_final = estado_final.fecha_pago
 
         resultados.append({
             "numero": numero,
@@ -333,7 +359,7 @@ def main():
                     conexion.rollback()
                     raise SystemExit(1)
 
-                imprimir_reporte(resultados, omitidos, formas, args.simular)
+                imprimir_reporte(resultados, omitidos, formas)
 
                 total_pagado = sum(r["delta"] for r in resultados)
                 print()
@@ -343,7 +369,8 @@ def main():
 
                 if args.simular:
                     print()
-                    print("  Modo simulacion: no se confirmo nada. Usa --simular=False para ejecutar.")
+                    print("  Modo simulacion: no se confirmo nada. "
+                          "Ejecuta el comando SIN --simular para aplicar el lote.")
                     conexion.rollback()
                     return
 

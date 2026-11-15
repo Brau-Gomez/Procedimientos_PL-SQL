@@ -344,8 +344,9 @@ def crear_indices(base):
     total = 0
     for nombre, indices in INDICES.items():
         if nombre in base.list_collection_names():
-            base[nombre].create_indexes(indices)
-            total += len(indices)
+            # create_indexes devuelve los nombres de los indices que quedaron
+            # activos: se cuentan los reales, no los solicitados.
+            total += len(base[nombre].create_indexes(indices))
     return total
 
 

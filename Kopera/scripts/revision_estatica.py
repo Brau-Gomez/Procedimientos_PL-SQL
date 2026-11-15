@@ -7,8 +7,14 @@ costado durante el desarrollo:
   1. NOMBRES NO DEFINIDOS: un identificador que se usa pero nunca se asigno
      (typos como "creditito" en vez de "credito").
   2. CARACTERES DAÑADOS U+FFFD que sobreviven en el codigo fuente.
-  3. IMPORTS ROTOS: modulos que no existen en el proyecto.
-  4. DUPLICADOS en un mismo ambito.
+  3. IMPORTS ROTOS: modulos que no existen en el proyecto ni en el entorno.
+  4. IMPORTS SIN USAR: un modulo importado que nunca se referencia.
+  5. LLAMADAS CON LA ARIDAD EQUIVOCADA: se le pasan mas (o menos) argumentos
+     de los que acepta la funcion llamada. Este es el chequeo que detecta los
+     errores que un simple "compila bien" no ve.
+  6. CLAVES DUPLICADAS en un diccionario: en Python la segunda pisa a la
+     primera en silencio, asi que el valor correcto nunca se aplica.
+  7. DUPLICADOS en un mismo ambito.
 
 El analisis de ambitos usa el modulo symtable de la libreria estandar, que
 resuelve correctamente las variables locales, globales y libres (clausuras),
@@ -20,6 +26,7 @@ Uso:
 
 import ast
 import builtins
+import importlib.util
 import symtable
 import sys
 import unicodedata
@@ -140,28 +147,219 @@ def revisar_cadenas_danadas(ruta, texto):
     return problemas
 
 
-def revisar_imports(ruta, texto):
-    """Verifica que los modulos propios del proyecto existan en disco."""
-    problemas = []
+def _modulos_del_proyecto():
+    """Nombres de los modulos propios del proyecto (los .py de scripts/)."""
     base = Path(__file__).resolve().parent
-    modulos_propios = {
-        p.stem for p in base.glob("*.py")
-    } | {
-        p.stem for p in (base / "etl-mongodb").glob("*.py")
-    }
+    modulos = {p.stem for p in base.glob("*.py")}
+    modulos |= {p.stem for p in (base / "etl-mongodb").glob("*.py")}
+    return base, modulos
+
+
+def _es_importable(nombre):
+    """True si el modulo se puede importar en este entorno."""
+    try:
+        return importlib.util.find_spec(nombre) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def revisar_imports(ruta, texto):
+    """
+    Verifica que todos los modulos importados existan de verdad.
+
+    Hay dos casos distintos:
+
+      - Modulo PROPIO (uno de los .py de scripts/): tiene que existir el
+        archivo correspondiente.
+      - Modulo EXTERNO (biblioteca estandar o de terceros): tiene que ser
+        importable en el entorno actual.
+
+    Antes esta comprobacion era vacua: la lista de modulos propios se armaba
+    con los archivos que ya existian, asi que la pregunta "existe el archivo?"
+    siempre era si. Ahora un nombre mal escrito (import transformacionn) si
+    se detecta.
+    """
+    problemas = []
+    base, modulos_propios = _modulos_del_proyecto()
 
     arbol = ast.parse(texto, filename=str(ruta))
     for nodo in ast.walk(arbol):
+        nombres = []
+        if isinstance(nodo, ast.Import):
+            nombres = [alias.name for alias in nodo.names]
+        elif isinstance(nodo, ast.ImportFrom):
+            # Los imports relativos (from . import x) no se pueden resolver
+            # sin un paquete: el proyecto usa imports absolutos.
+            if nodo.level == 0 and nodo.module:
+                nombres = [nodo.module]
+
+        for nombre in nombres:
+            raiz = nombre.split(".")[0]
+            if raiz in modulos_propios:
+                if not (base / f"{raiz}.py").exists():
+                    problemas.append((nodo.lineno, f"import roto: {nombre}"))
+            elif not _es_importable(raiz):
+                problemas.append((nodo.lineno, f"modulo inexistente: {nombre}"))
+
+    return problemas
+
+
+def revisar_imports_sin_usar(ruta, texto):
+    """
+    Detecta los modulos que se importan pero nunca se usan.
+
+    Un import que no se usa no rompe nada, pero ensucia el modulo y suele
+    delatar que el codigo cambio de forma y dejo la referencia colgando.
+    """
+    problemas = []
+    arbol = ast.parse(texto, filename=str(ruta))
+
+    importados = {}
+    for nodo in ast.walk(arbol):
         if isinstance(nodo, ast.Import):
             for alias in nodo.names:
-                raiz = alias.name.split(".")[0]
-                if raiz in modulos_propios and raiz != ruta.stem:
-                    if not (base / f"{raiz}.py").exists():
-                        problemas.append((nodo.lineno, f"import roto: {alias.name}"))
+                nombre = alias.asname or alias.name.split(".")[0]
+                importados[nombre] = nodo.lineno
         elif isinstance(nodo, ast.ImportFrom):
-            if nodo.level == 0 and nodo.module in modulos_propios:
-                if not (base / f"{nodo.module}.py").exists():
-                    problemas.append((nodo.lineno, f"import roto: {nodo.module}"))
+            if nodo.module == "__future__":
+                continue
+            for alias in nodo.names:
+                if alias.name == "*":
+                    continue
+                nombre = alias.asname or alias.name
+                importados[nombre] = nodo.lineno
+
+    # Nombres efectivamente referenciados en el modulo.
+    usados = set()
+    for nodo in ast.walk(arbol):
+        if isinstance(nodo, ast.Name):
+            usados.add(nodo.id)
+        elif isinstance(nodo, ast.Attribute):
+            base_nodo = nodo
+            while isinstance(base_nodo, ast.Attribute):
+                base_nodo = base_nodo.value
+            if isinstance(base_nodo, ast.Name):
+                usados.add(base_nodo.id)
+
+    for nombre, linea in sorted(importados.items(), key=lambda par: par[1]):
+        if nombre not in usados:
+            problemas.append((linea, f"import sin usar: {nombre!r}"))
+
+    return problemas
+
+
+def _firmas_del_modulo(arbol):
+    """Mapa nombre -> firma de las funciones definidas a nivel de modulo."""
+    firmas = {}
+    for nodo in arbol.body:
+        if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            argumentos = nodo.args
+            posicionales = argumentos.posonlyargs + argumentos.args
+            firmas[nodo.name] = {
+                "nombres": [a.arg for a in posicionales],
+                "requeridos": len(posicionales) - len(argumentos.defaults),
+                "varargs": argumentos.vararg is not None,
+                "kwonly": [a.arg for a in argumentos.kwonlyargs],
+                "kwarg": argumentos.kwarg is not None,
+            }
+    return firmas
+
+
+def revisar_arity(ruta, texto):
+    """
+    Detecta las llamadas con mas o menos argumentos de los que acepta la
+    funcion llamada.
+
+    Este es el chequeo que mas Errores de ejecucion detecta: un codigo que
+    compila y que "se ve bien" puede llamar a una funcion con un argumento de
+    mas (TypeError en tiempo de ejecucion) o de menos.
+
+    Solo se revisan las llamadas a funciones definidas en el mismo modulo: las
+    funciones importadas de otro modulo no se pueden inspeccionar desde aca.
+    """
+    problemas = []
+    arbol = ast.parse(texto, filename=str(ruta))
+    firmas = _firmas_del_modulo(arbol)
+
+    for nodo in ast.walk(arbol):
+        if not isinstance(nodo, ast.Call) or not isinstance(nodo.func, ast.Name):
+            continue
+        firma = firmas.get(nodo.func.id)
+        if firma is None:
+            continue
+
+        # Con *args o **kwargs en la llamada no se puede contar con certeza.
+        if any(isinstance(arg, ast.Starred) for arg in nodo.args):
+            continue
+        if any(kw.arg is None for kw in nodo.keywords):
+            continue
+
+        posicionales = len(nodo.args)
+        keywords = {kw.arg for kw in nodo.keywords}
+
+        if posicionales > len(firma["nombres"]) and not firma["varargs"]:
+            problemas.append((
+                nodo.lineno,
+                f"'{nodo.func.id}()' acepta {len(firma['nombres'])} argumento(s) "
+                f"posicional(es) y se le pasan {posicionales}",
+            ))
+            continue
+
+        # Argumentos posicionales que llegan por nombre.
+        cubiertos = 0
+        for indice, nombre in enumerate(firma["nombres"]):
+            if indice >= posicionales and nombre in keywords:
+                cubiertos += 1
+
+        if posicionales + cubiertos < firma["requeridos"]:
+            faltan = firma["requeridos"] - posicionales - cubiertos
+            problemas.append((
+                nodo.lineno,
+                f"'{nodo.func.id}()' requiere {firma['requeridos']} argumento(s) "
+                f"y se le pasan {posicionales + cubiertos} (faltan {faltan})",
+            ))
+
+        if not firma["kwarg"]:
+            desconocidos = keywords - set(firma["nombres"]) - set(firma["kwonly"])
+            if desconocidos:
+                problemas.append((
+                    nodo.lineno,
+                    f"'{nodo.func.id}()' no acepta el(os) argumento(s) "
+                    f"{sorted(desconocidos)}",
+                ))
+
+    return problemas
+
+
+def revisar_claves_duplicadas(ruta, texto):
+    """
+    Detecta claves repetidas en un diccionario.
+
+    En Python, un diccionario literal con la misma clave dos veces conserva
+    solo el ULTIMO valor: la correccion nunca se aplica y el error pasa
+    inadvertido.
+    """
+    problemas = []
+    arbol = ast.parse(texto, filename=str(ruta))
+
+    for nodo in ast.walk(arbol):
+        if not isinstance(nodo, ast.Dict):
+            continue
+        vistas = {}
+        for clave in nodo.keys:
+            if not isinstance(clave, ast.Constant):
+                continue
+            if not isinstance(clave.value, (str, int, float, bool)):
+                continue
+            if clave.value in vistas:
+                problemas.append((
+                    clave.lineno,
+                    f"clave duplicada en el diccionario: {clave.value!r} "
+                    f"(ya aparecia en la linea {vistas[clave.value]})",
+                ))
+            else:
+                vistas[clave.value] = clave.lineno
+
     return problemas
 
 
@@ -183,8 +381,15 @@ def revisar_modulo(ruta):
     # 3. Caracteres danados.
     problemas.extend(revisar_cadenas_danadas(ruta, texto))
 
-    # 4. Imports rotos.
+    # 4. Imports rotos y imports sin usar.
     problemas.extend(revisar_imports(ruta, texto))
+    problemas.extend(revisar_imports_sin_usar(ruta, texto))
+
+    # 5. Llamadas con la aridad equivocada.
+    problemas.extend(revisar_arity(ruta, texto))
+
+    # 6. Claves duplicadas en diccionarios.
+    problemas.extend(revisar_claves_duplicadas(ruta, texto))
 
     return problemas
 

@@ -43,6 +43,8 @@ import argparse
 import copy
 from datetime import datetime
 
+from pymongo.errors import WriteError
+
 import transformacion as transform
 import validaciones as reglas
 from config import (
@@ -62,6 +64,23 @@ ID_CATALOGO_PRUEBA = "TEST-INV-999"
 # Cliente real que se usa en los casos de Update y Delete. Al final se
 # restaura a su estado original.
 NRO_CLIENTE_TRABAJO = 5
+
+# Credito, cuotas e inversiones del cliente de trabajo. Son los identificadores
+# de la semilla BD_KOPERA.SQL: el CRUD los usa como fixture conocido.
+CREDITO_TRABAJO = 2001
+CUOTA_TRABAJO_LECTURA = 5
+CUOTA_TRABAJO_PAGO = 8
+INVERSION_TRABAJO = 250001
+INVERSION_TRABAJO_ALTERNATIVA = 250002
+
+# Identificadores de los documentos que crea el CRUD. Son altos y fijos para
+# que nunca choquen con los de la semilla (nro_movimiento llega a 345).
+NRO_MOVIMIENTO_PRUEBA = 999999
+NRO_MOVIMIENTO_ALTERNATIVO = 999998
+NRO_CLIENTE_INCOMPLETO = 9998
+
+# Cantidad de clientes que trae la semilla y que migra el ETL.
+TOTAL_CLIENTES_MIGRADOS = 130
 
 
 class EntornoPrueba:
@@ -266,14 +285,16 @@ def caso_c1_crear_cliente(base, entorno):
     # es la evidencia de que la validacion del lado del servidor funciona.
     incompleto = copy.deepcopy(documento)
     del incompleto["nombre"]
-    incompleto["nro_cliente"] = 9998
-    incompleto["_id"] = 9998
+    incompleto["nro_cliente"] = NRO_CLIENTE_INCOMPLETO
+    incompleto["_id"] = NRO_CLIENTE_INCOMPLETO
 
     mensaje_rechazo = "el servidor ACEPTÓ el documento incompleto"
     try:
         base[COLECCION_CLIENTES].insert_one(incompleto)
-        base[COLECCION_CLIENTES].delete_one({"_id": 9998})
-    except Exception as e:
+        base[COLECCION_CLIENTES].delete_one({"_id": NRO_CLIENTE_INCOMPLETO})
+    except WriteError:
+        # Solo se acepta este error: un fallo de red o de conexion no es un
+        # rechazo del validador y no debe reportarse como si lo fuera.
         mensaje_rechazo = "el servidor RECHAZÓ el documento incompleto (validación $jsonSchema)"
 
     base[COLECCION_CLIENTES].insert_one(documento)
@@ -322,9 +343,9 @@ def caso_c3_crear_evento_bitacora(base, entorno):
     solo se crea si el monto pagado cambio de verdad.
     """
     documento = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
-    credito, cuota = buscar_cuota(documento, 2001, 5)
+    credito, cuota = buscar_cuota(documento, CREDITO_TRABAJO, CUOTA_TRABAJO_LECTURA)
     if cuota is None:
-        return "no se encontro la cuota 2001/5 del cliente de trabajo", False
+        return f"no se encontro la cuota {CREDITO_TRABAJO}/{CUOTA_TRABAJO_LECTURA} del cliente de trabajo", False
 
     entorno.guardar_cliente(NRO_CLIENTE_TRABAJO)
 
@@ -332,16 +353,16 @@ def caso_c3_crear_evento_bitacora(base, entorno):
     # cambio, asi que la REGLA 2 dice que NO hay evento que registrar.
     evento_inexistente = reglas.construir_evento_bitacora(
         cuota, NRO_CLIENTE_TRABAJO, cuota["monto_pagado"], cuota["monto_pagado"],
-        "Efectivo", nro_credito=2001, fecha_evento=datetime.now().isoformat(),
+        "Efectivo", nro_credito=CREDITO_TRABAJO, fecha_evento=datetime.now().isoformat(),
     )
 
     # Y ahora un pago real sobre una cuota pendiente: si cambia, hay evento.
-    _, cuota_pendiente = buscar_cuota(documento, 2001, 8)
+    _, cuota_pendiente = buscar_cuota(documento, CREDITO_TRABAJO, CUOTA_TRABAJO_PAGO)
     monto_nuevo = cuota_pendiente["monto_pagado"] + 1000
     evento = reglas.construir_evento_bitacora(
         cuota_pendiente, NRO_CLIENTE_TRABAJO,
         cuota_pendiente["monto_pagado"], monto_nuevo, "Efectivo",
-        nro_credito=2001,
+        nro_credito=CREDITO_TRABAJO,
         fecha_evento=datetime.now().isoformat(),
         id_bitacora=siguiente_id_bitacora(base[COLECCION_BITACORA]),
     )
@@ -371,13 +392,18 @@ def caso_c4_crear_movimiento(base, entorno):
 
     Primero se prueba que un movimiento invalido es rechazado por las reglas
     (mismo comportamiento que trg_movimiento_valida en Oracle).
+
+    El bloque "analisis" se recalcula en la MISMA operacion: en MongoDB esta
+    materializado dentro del documento, asi que si no se refrescara, el
+    documento quedaria con un analisis.total_ahorrado que ya no corresponde a
+    sus inversiones.
     """
     documento = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
     entorno.guardar_cliente(NRO_CLIENTE_TRABAJO)
 
-    inversion = buscar_inversion(documento, 250001)
+    inversion = buscar_inversion(documento, INVERSION_TRABAJO)
     if inversion is None:
-        return "no se encontro la inversion 250001 del cliente de trabajo", False
+        return f"no se encontro la inversion {INVERSION_TRABAJO} del cliente de trabajo", False
 
     # --- REGLA 3 aplicada a un movimiento invalido (monto negativo) ---
     invalido = reglas.validar_movimiento(inversion, -5000, "ABONO")
@@ -393,9 +419,12 @@ def caso_c4_crear_movimiento(base, entorno):
     if not valido.valido:
         return f"el movimiento valido fue rechazado: {valido.errores}", False
 
-    nuevo_saldo = valido.datos["saldo_actualizado"]
+    # REGLA 4: el saldo nuevo lo calcula la funcion que replica el trigger.
+    nuevo_saldo = reglas.calcular_ahorro_actualizado(inversion, monto, "ABONO")
+    saldo_coincide = nuevo_saldo == valido.datos["saldo_actualizado"]
+
     movimiento = {
-        "nro_movimiento": 999999,
+        "nro_movimiento": NRO_MOVIMIENTO_PRUEBA,
         "fecha": datetime.now().isoformat(),
         "tipo_movimiento": "ABONO",
         "monto": monto,
@@ -403,17 +432,25 @@ def caso_c4_crear_movimiento(base, entorno):
         "monto_con_signo": monto,
     }
 
+    # Se prepara el documento como quedara, para recalcular "analisis".
+    documento_modificado = copy.deepcopy(documento)
+    inversion_modificada = buscar_inversion(documento_modificado, INVERSION_TRABAJO)
+    inversion_modificada["monto_total_ahorrado"] = nuevo_saldo
+    inversion_modificada["movimientos"].append(movimiento)
+    analisis = transform.recalcular_analisis(documento_modificado)
+
     resultado = base[COLECCION_CLIENTES].update_one(
         {"nro_cliente": NRO_CLIENTE_TRABAJO},
         {
+            "$set": {"analisis": analisis},
             "$inc": {"inversiones.$[inv].monto_total_ahorrado": monto},
             "$push": {"inversiones.$[inv].movimientos": movimiento},
         },
-        array_filters=[{"inv.nro_solic_prod": 250001}],
+        array_filters=[{"inv.nro_solic_prod": INVERSION_TRABAJO}],
     )
 
     actualizado = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
-    inversion_actualizada = buscar_inversion(actualizado, 250001)
+    inversion_actualizada = buscar_inversion(actualizado, INVERSION_TRABAJO)
 
     obtenido = (
         f"movimiento ABONO de ${monto:,} insertado; "
@@ -421,14 +458,18 @@ def caso_c4_crear_movimiento(base, entorno):
         f"{inversion_actualizada['monto_total_ahorrado']:,} "
         f"(REGLA 4 aplicada con $inc); "
         f"movimientos: {len(inversion['movimientos'])} -> {len(inversion_actualizada['movimientos'])}; "
+        f"analisis.total_ahorrado recalculado: "
+        f"{actualizado['analisis']['total_ahorrado']:,}; "
         f"REGLA 3: monto negativo rechazado={monto_invalido_rechazado}, "
         f"tipo invalido rechazado={not tipo_invalido.valido}"
     )
     cumple = (
         resultado.modified_count == 1
         and inversion_actualizada["monto_total_ahorrado"] == nuevo_saldo
+        and saldo_coincide
         and monto_invalido_rechazado
         and not tipo_invalido.valido
+        and actualizado["analisis"]["total_ahorrado"] == analisis["total_ahorrado"]
     )
     return obtenido, cumple
 
@@ -515,7 +556,7 @@ def caso_r3_contar_por_clasificacion(base, entorno):
     )
     total = sum(f["clientes"] for f in filas)
     obtenido = f"{detalle} (total: {total} clientes migrados)"
-    return obtenido, total == 130
+    return obtenido, total == TOTAL_CLIENTES_MIGRADOS
 
 
 def caso_r4_agregar_por_producto(base, entorno):
@@ -687,9 +728,9 @@ def caso_u2_registrar_pago(base, entorno):
     documento = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
     entorno.guardar_cliente(NRO_CLIENTE_TRABAJO)
 
-    credito, cuota = buscar_cuota(documento, 2001, 8)
+    credito, cuota = buscar_cuota(documento, CREDITO_TRABAJO, CUOTA_TRABAJO_PAGO)
     if cuota is None:
-        return "no se encontro la cuota 2001/8", False
+        return f"no se encontro la cuota {CREDITO_TRABAJO}/{CUOTA_TRABAJO_PAGO}", False
 
     # --- REGLA 1: un pago mayor que el valor de la cuota debe rechazarse ---
     pago_invalido = reglas.validar_pago_cuota(
@@ -709,14 +750,16 @@ def caso_u2_registrar_pago(base, entorno):
     evento = reglas.construir_evento_bitacora(
         cuota, NRO_CLIENTE_TRABAJO, cuota["monto_pagado"], monto_pagado,
         "Transferencia Electronica",
-        nro_credito=2001,
+        nro_credito=CREDITO_TRABAJO,
         fecha_evento=datetime.now().isoformat(),
         id_bitacora=siguiente_id_bitacora(base[COLECCION_BITACORA]),
     )
 
     # 1) Actualizar la cuota (monto pagado y saldo derivado) y el analisis.
     documento_modificado = copy.deepcopy(documento)
-    credito_mod, cuota_mod = buscar_cuota(documento_modificado, 2001, 8)
+    credito_mod, cuota_mod = buscar_cuota(
+        documento_modificado, CREDITO_TRABAJO, CUOTA_TRABAJO_PAGO
+    )
     cuota_mod["monto_pagado"] = monto_pagado
     cuota_mod["saldo_por_pagar"] = saldo
     cuota_mod["estado"] = "PAGADA"
@@ -737,8 +780,8 @@ def caso_u2_registrar_pago(base, entorno):
             },
             "$push": {
                 "historial_pagos": {
-                    "nro_solic_credito": 2001,
-                    "nro_cuota": 8,
+                    "nro_solic_credito": CREDITO_TRABAJO,
+                    "nro_cuota": CUOTA_TRABAJO_PAGO,
                     "fecha_evento": datetime.now().isoformat(),
                     "monto_pagado_anterior": cuota["monto_pagado"],
                     "monto_pagado_nuevo": monto_pagado,
@@ -749,8 +792,8 @@ def caso_u2_registrar_pago(base, entorno):
             },
         },
         array_filters=[
-            {"cred.nro_solic_credito": 2001},
-            {"cuo.nro_cuota": 8},
+            {"cred.nro_solic_credito": CREDITO_TRABAJO},
+            {"cuo.nro_cuota": CUOTA_TRABAJO_PAGO},
         ],
     )
 
@@ -760,13 +803,18 @@ def caso_u2_registrar_pago(base, entorno):
 
     # 3) Verificar el resultado leyendo el documento.
     final = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
-    _, cuota_8 = buscar_cuota(final, 2001, 8)
+    _, cuota_8 = buscar_cuota(final, CREDITO_TRABAJO, CUOTA_TRABAJO_PAGO)
     eventos = base[COLECCION_BITACORA].count_documents(
-        {"nro_cliente": NRO_CLIENTE_TRABAJO, "nro_solic_credito": 2001, "nro_cuota": 8}
+        {
+            "nro_cliente": NRO_CLIENTE_TRABAJO,
+            "nro_solic_credito": CREDITO_TRABAJO,
+            "nro_cuota": CUOTA_TRABAJO_PAGO,
+        }
     )
 
     obtenido = (
-        f"pago de ${monto_pagado:,} registrado en la cuota 2001/8: "
+        f"pago de ${monto_pagado:,} registrado en la cuota "
+        f"{CREDITO_TRABAJO}/{CUOTA_TRABAJO_PAGO}: "
         f"monto_pagado={cuota_8['monto_pagado']:,}, saldo={cuota_8['saldo_por_pagar']:,}, "
         f"estado={cuota_8['estado']}; analisis recalculado "
         f"(saldo {documento['analisis']['saldo_pendiente']:,} -> {final['analisis']['saldo_pendiente']:,}, "
@@ -794,9 +842,9 @@ def caso_u3_abonar_inversion(base, entorno):
     documento = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
     entorno.guardar_cliente(NRO_CLIENTE_TRABAJO)
 
-    inversion = buscar_inversion(documento, 250002)
+    inversion = buscar_inversion(documento, INVERSION_TRABAJO_ALTERNATIVA)
     if inversion is None:
-        inversion = buscar_inversion(documento, 250001)
+        inversion = buscar_inversion(documento, INVERSION_TRABAJO)
     if inversion is None:
         return "no se encontro una inversion del cliente de trabajo", False
 
@@ -808,8 +856,12 @@ def caso_u3_abonar_inversion(base, entorno):
     if not valido.valido:
         return f"el movimiento valido fue rechazado: {valido.errores}", False
 
+    # REGLA 4: el saldo nuevo lo calcula la funcion que replica el trigger.
+    nuevo_saldo = reglas.calcular_ahorro_actualizado(inversion, monto, "ABONO")
+    saldo_coincide = nuevo_saldo == valido.datos["saldo_actualizado"]
+
     movimiento = {
-        "nro_movimiento": 999998,
+        "nro_movimiento": NRO_MOVIMIENTO_ALTERNATIVO,
         "fecha": datetime.now().isoformat(),
         "tipo_movimiento": "ABONO",
         "monto": monto,
@@ -817,9 +869,17 @@ def caso_u3_abonar_inversion(base, entorno):
         "monto_con_signo": monto,
     }
 
+    # Se prepara el documento como quedara, para recalcular "analisis".
+    documento_modificado = copy.deepcopy(documento)
+    inversion_modificada = buscar_inversion(documento_modificado, nro_solic_prod)
+    inversion_modificada["monto_total_ahorrado"] = nuevo_saldo
+    inversion_modificada["movimientos"].append(movimiento)
+    analisis = transform.recalcular_analisis(documento_modificado)
+
     resultado = base[COLECCION_CLIENTES].update_one(
         {"nro_cliente": NRO_CLIENTE_TRABAJO},
         {
+            "$set": {"analisis": analisis},
             "$inc": {"inversiones.$[inv].monto_total_ahorrado": monto},
             "$push": {"inversiones.$[inv].movimientos": movimiento},
         },
@@ -839,6 +899,8 @@ def caso_u3_abonar_inversion(base, entorno):
         resultado.modified_count == 1
         and inversion_final["monto_total_ahorrado"] == inversion["monto_total_ahorrado"] + monto
         and len(inversion_final["movimientos"]) == len(inversion["movimientos"]) + 1
+        and saldo_coincide
+        and final["analisis"]["total_ahorrado"] == analisis["total_ahorrado"]
     )
     return obtenido, cumple
 
@@ -888,11 +950,15 @@ def caso_d2_eliminar_movimiento(base, entorno):
 
     Muestra que en el modelo documental el movimiento es parte del documento:
     borrarlo es una operacion sobre el array, no un DELETE en otra tabla.
+
+    Al quitar el movimiento, el bloque "analisis" tambien se recalcula: si no,
+    el documento quedaria con un analisis.total_ahorrado que ya no corresponde
+    a sus inversiones.
     """
     entorno.guardar_cliente(NRO_CLIENTE_TRABAJO)
 
     documento = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
-    inversion = buscar_inversion(documento, 250001)
+    inversion = buscar_inversion(documento, INVERSION_TRABAJO)
     if inversion is None or not inversion.get("movimientos"):
         return "no hay movimientos que borrar", False
 
@@ -920,10 +986,19 @@ def caso_d2_eliminar_movimiento(base, entorno):
         for m in inversion_final["movimientos"]
     )
 
+    # 3) Refrescar el bloque "analisis" con el documento ya sin el movimiento.
+    analisis = transform.recalcular_analisis(final)
+    base[COLECCION_CLIENTES].update_one(
+        {"nro_cliente": NRO_CLIENTE_TRABAJO},
+        {"$set": {"analisis": analisis}},
+    )
+    final = base[COLECCION_CLIENTES].find_one({"nro_cliente": NRO_CLIENTE_TRABAJO})
+
     obtenido = (
         f"movimiento {movimiento['nro_movimiento']} eliminado del array; "
         f"movimientos {len(inversion['movimientos'])} -> {len(inversion_final['movimientos'])}; "
         f"saldo ajustado {saldo_anterior:,} -> {inversion_final['monto_total_ahorrado']:,}; "
+        f"analisis.total_ahorrado recalculado: {final['analisis']['total_ahorrado']:,}; "
         f"el movimiento sigue presente: {quedan}"
     )
     return obtenido, resultado.modified_count == 1 and not quedan

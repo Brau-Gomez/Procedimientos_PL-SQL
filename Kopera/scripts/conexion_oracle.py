@@ -22,9 +22,28 @@ from dbms_output import capturar_dbms_output
 
 
 def mostrar_servidor(cursor):
-    """Muestra la version del servidor Oracle al que se conecto."""
-    cursor.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%'")
-    print("Servidor:", cursor.fetchone()[0].splitlines()[0])
+    """
+    Muestra la version del servidor Oracle al que se conecto.
+
+    La vista v$version exige privilegios que el usuario ADMIN_PROYECTO puede
+    no tener (ORA-00942). Si falla, se recurre a product_component_version,
+    que es de lectura publica.
+    """
+    try:
+        cursor.execute("SELECT banner FROM v$version WHERE banner LIKE 'Oracle%'")
+        fila = cursor.fetchone()
+        if fila:
+            print("Servidor:", fila[0].splitlines()[0])
+            return
+    except Exception:
+        pass
+
+    cursor.execute("""
+        SELECT version FROM product_component_version
+         WHERE product LIKE 'Oracle%' AND ROWNUM = 1
+    """)
+    fila = cursor.fetchone()
+    print("Servidor:", fila[0] if fila else "(version no disponible)")
 
 
 def mostrar_objetos(cursor):

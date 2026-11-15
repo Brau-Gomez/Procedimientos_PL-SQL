@@ -8,7 +8,7 @@ migracion:
 1. LIMPIEZA DE CARACTERES DAÑADOS. El archivo semilla BD_KOPERA.SQL tiene el
    caracter de reemplazo Unicode U+FFFD (�) donde deberian ir los acentos. No
    es un problema de codificacion del driver ni de la consola: el dato llega
-   asi desde el origen. Se corrige con un diccionario de 108 entradas, sin
+   asi desde el origen. Se corrige con un diccionario de 90 entradas, sin
    eliminar los acentos: el nombre debe quedar legible en la coleccion.
 
 2. ANIDADO POR AGREGADO. El cliente es el agregado natural: sus creditos con
@@ -23,6 +23,7 @@ migracion:
    trazabilidad.
 """
 
+import re
 from datetime import date, datetime
 
 # ==========================================================================
@@ -32,7 +33,7 @@ from datetime import date, datetime
 # Diccionario de correccion. La clave es el texto dañado tal como llega de
 # Oracle (con U+FFFD) y el valor es la forma correcta.
 #
-# Se construyó extrayendo todos los tokens dañados de la base (108 distintos)
+# Se construyó extrayendo todos los tokens dañados de la base (90 distintos)
 # y revisando uno por uno. Todos son toponimos o palabras del español Chilean
 # donde el caracter acentuado es inequivoco.
 CORRECCIONES = {
@@ -210,7 +211,15 @@ def reclasificar(clasificacion_oracle, cantidad_creditos):
     Regla de negocio acordada: un cliente SIN creditos no es un riesgo, es una
     oportunidad comercial (puede ser cross-selling). Se conserva el valor
     original del package para trazabilidad.
+
+    La reclasificacion NO se aplica sobre "SIN PRODUCTOS": ese valor significa
+    que el cliente no tiene ni creditos ni inversiones, y el package lo emite
+    como categoria propia. Reemplazarlo por "OPORTUNIDAD" perderia el
+    significado del dato original (que ademas se conserva en
+    clasificacion_oracle).
     """
+    if clasificacion_oracle == "SIN PRODUCTOS":
+        return "SIN PRODUCTOS", "Cliente sin productos ni creditos"
     if cantidad_creditos == 0:
         return "OPORTUNIDAD", "Cliente sin creditos vigentes"
     return clasificacion_oracle, "Clasificacion calculada por pk_analisis_kopera"
@@ -235,9 +244,13 @@ def clasificar_cliente(porcentaje_pagado, cuotas_vencidas, saldo_pendiente,
 
     Regla de la EVAL 3 (aplicada encima):
         sin creditos -> OPORTUNIDAD
+
+    Devuelve (clasificacion, clasificacion_oracle, motivo): el segundo valor es
+    la clasificacion tal como la daria el package, que es la que se conserva
+    en el documento para trazabilidad.
     """
     if not tiene_creditos and not tiene_inversiones:
-        return "SIN PRODUCTOS", "Cliente sin productos ni creditos"
+        return "SIN PRODUCTOS", "SIN PRODUCTOS", "Cliente sin productos ni creditos"
 
     if cuotas_vencidas > 0 or porcentaje_pagado < 50:
         clasificacion_oracle = "RIESGO"
@@ -246,7 +259,10 @@ def clasificar_cliente(porcentaje_pagado, cuotas_vencidas, saldo_pendiente,
     else:
         clasificacion_oracle = "BUENO"
 
-    return reclasificar(clasificacion_oracle, 1 if tiene_creditos else 0)
+    clasificacion, motivo = reclasificar(
+        clasificacion_oracle, 1 if tiene_creditos else 0
+    )
+    return clasificacion, clasificacion_oracle, motivo
 
 
 # ==========================================================================
@@ -314,6 +330,9 @@ def construir_documentos_clientes(datos):
 
     analisis_por_cliente = {a["nro_cliente"]: a for a in datos["analisis"]}
     totales_por_cliente = datos["totales"]
+    # Textos CRUDOS de Oracle, para el control de calidad (ver mas abajo).
+    creditos_crudos = {c["nro_solic_credito"]: c for c in datos["creditos"]}
+    inversiones_crudas = {i["nro_solic_prod"]: i for i in datos["inversiones"]}
     pagos_por_cliente = {}
     for pago in datos["pagos"]:
         pagos_por_cliente.setdefault(pago["nro_cliente"], []).append(pago)
@@ -424,6 +443,9 @@ def construir_documentos_clientes(datos):
             })
 
         # --- Control de calidad del texto de este cliente ---
+        # Se revisan los valores CRUDOS de Oracle, no los ya corregidos: si se
+        # revisara el texto ya limpiado, el conteo de U+FFFD seria siempre cero
+        # y el informe de calidad no detectaria nada.
         textos_a_revisar = [
             cliente["pnombre"], cliente["snombre"], cliente["appaterno"],
             cliente["apmaterno"], cliente["direccion"], cliente["nombre_region"],
@@ -431,10 +453,12 @@ def construir_documentos_clientes(datos):
             cliente["nombre_prof_ofic"], cliente["nombre_tipo_contrato"],
         ]
         for credito in lista_creditos:
-            textos_a_revisar.append(credito["tipo_credito"]["nombre"])
-            textos_a_revisar.append(credito["tipo_credito"]["descripcion"])
+            crudo = creditos_crudos.get(credito["nro_solic_credito"], {})
+            textos_a_revisar.append(crudo.get("nombre_credito"))
+            textos_a_revisar.append(crudo.get("desc_credito"))
         for inversion in lista_inversiones:
-            textos_a_revisar.append(inversion["producto"]["nombre"])
+            crudo = inversiones_crudas.get(inversion["nro_solic_prod"], {})
+            textos_a_revisar.append(crudo.get("nombre_prod_inv"))
 
         for texto in textos_a_revisar:
             if texto and contar_danados(limpiar_texto(texto)) > 0:
@@ -623,12 +647,26 @@ def recalcular_analisis(documento):
     el CRUD modifica una cuota o un movimiento, hay que recalcularlo para que
     el documento no quede desactualizado.
 
+    ALINEACION CON ORACLE. Los totales se calculan con la misma formula que
+    las funciones del package pk_analisis_kopera:
+
+        total_creditos    = SUM(cuota.valor_cuota)
+        porcentaje_pagado = ROUND(total_pagado / total_creditos * 100, 2)
+        saldo_pendiente  = SUM(cuota.saldo_por_pagar)
+        total_ahorrado   = SUM(inversion.monto_total_ahorrado)
+
+    El denominador del porcentaje es la SUMA DE LAS CUOTAS (no la suma de los
+    montos de los creditos), que es exactamente lo que usa fn_porcentaje_pagado
+    en el package. Con la suma de montos de creditos el CRUD calcularia un
+    porcentaje distinto al de Oracle y el bloque analisis dejaria de coincidir
+    con el documento que produjo el ETL.
+
     Devuelve el bloque "analisis" completo, listo para un $set.
     """
     creditos = documento.get("creditos", [])
     inversiones = documento.get("inversiones", [])
 
-    total_creditos = sum(c.get("monto_credito", 0) for c in creditos)
+    total_creditos = 0
     total_pagado = 0
     saldo_pendiente = 0
     total_cuotas = 0
@@ -640,6 +678,8 @@ def recalcular_analisis(documento):
     for credito in creditos:
         for cuota in credito.get("cuotas", []):
             total_cuotas += 1
+            # fn_porcentaje_pagado divide por la suma del valor de las cuotas.
+            total_creditos += cuota.get("valor_cuota", 0)
             total_pagado += cuota.get("monto_pagado", 0)
             saldo_pendiente += cuota.get("saldo_por_pagar", 0)
 
@@ -660,7 +700,7 @@ def recalcular_analisis(documento):
     else:
         porcentaje_pagado = 0
 
-    clasificacion, motivo = clasificar_cliente(
+    clasificacion, clasificacion_oracle, motivo = clasificar_cliente(
         porcentaje_pagado,
         vencidas,
         saldo_pendiente,
@@ -682,10 +722,33 @@ def recalcular_analisis(documento):
             "pendientes": pendientes,
         },
         "clasificacion": clasificacion,
-        "clasificacion_oracle": clasificacion if clasificacion != "OPORTUNIDAD" else None,
+        "clasificacion_oracle": clasificacion_oracle,
         "motivo_clasificacion": motivo,
         "alertas": generar_alertas(creditos),
     }
+
+
+def _a_numero(texto):
+    """
+    Convierte un importe impreso por Oracle en un numero.
+
+    Oracle puede emitir el saldo con o sin separador de miles y con o sin
+    signo de moneda: '$45312345', '$45.312.345' o '$45,312,345'. Un int()
+    directo sobre el texto reventaba con ValueError en cuanto aparecia un
+    separador, asi que se normaliza antes de convertir.
+    """
+    limpio = re.sub(r"[^\d.,-]", "", str(texto))
+    if not limpio:
+        return 0
+
+    # Formato con separador de miles: 45.312.345 o 45,312,345.
+    if re.fullmatch(r"-?\d{1,3}([.,]\d{3})+", limpio):
+        limpio = limpio.replace(".", "").replace(",", "")
+    else:
+        limpio = limpio.replace(",", "")
+
+    valor = float(limpio)
+    return int(valor) if valor.is_integer() else valor
 
 
 def parsear_resumen_proceso(lineas_salida):
@@ -704,17 +767,18 @@ def parsear_resumen_proceso(lineas_salida):
     saldo_total = 0
 
     for linea in reversed(lineas_salida):
-        if linea.startswith("Clientes analizados:"):
-            partes = linea.split("|")
-            for parte in partes:
-                parte = parte.strip()
-                if parte.startswith("Clientes analizados:"):
-                    clientes_analizados = int(parte.split(":")[1].strip())
-                elif parte.startswith("saldo total:"):
-                    # Quita el signo de moneda y cualquier separador de miles.
-                    monto = parte.split(":")[1].strip().replace("$", "").replace(".", "")
-                    saldo_total = int(monto)
-            break
+        if not linea.startswith("Clientes analizados:"):
+            continue
+
+        match_clientes = re.search(r"Clientes analizados:\s*(\d+)", linea)
+        if match_clientes:
+            clientes_analizados = int(match_clientes.group(1))
+
+        match_saldo = re.search(r"saldo total:\s*\$?\s*([\d.,]+)", linea)
+        if match_saldo:
+            saldo_total = _a_numero(match_saldo.group(1))
+
+        break
 
     return clientes_analizados, saldo_total
 

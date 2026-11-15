@@ -26,7 +26,6 @@ import csv
 from datetime import datetime
 from pathlib import Path
 
-import extraccion_oracle as extraccion
 from config import (
     COLECCION_BITACORA,
     COLECCION_CATALOGOS,
@@ -125,6 +124,20 @@ def leer_oracle(cursor):
     """)
     eventos, monto_nuevo, monto_anterior = cursor.fetchone()
 
+    # Catalogos maestro: son las mismas siete tablas que arma
+    # extraccion_oracle.extraer_catalogos, y cada fila produce un documento.
+    cursor.execute("""
+        SELECT (SELECT COUNT(*) FROM producto_inversion)
+             + (SELECT COUNT(*) FROM credito)
+             + (SELECT COUNT(*) FROM forma_pago)
+             + (SELECT COUNT(*) FROM tipo_movimiento)
+             + (SELECT COUNT(*) FROM aporte_a_sbif)
+             + (SELECT COUNT(*) FROM profesion_oficio)
+             + (SELECT COUNT(*) FROM tipo_contrato)
+          FROM dual
+    """)
+    catalogos = cursor.fetchone()[0]
+
     return {
         "clientes": clientes,
         "movimientos": movimientos,
@@ -139,6 +152,7 @@ def leer_oracle(cursor):
             "monto_nuevo": monto_nuevo,
             "monto_anterior": monto_anterior,
         },
+        "catalogos": catalogos,
     }
 
 
@@ -151,17 +165,10 @@ def leer_atlas(base):
         inversiones = documento.get("inversiones", [])
 
         cuotas = sum(len(c.get("cuotas", [])) for c in creditos)
-        deuda = sum(c.get("monto_credito", 0) for c in creditos)
-        pagado = sum(
-            cuota.get("monto_pagado", 0)
-            for c in creditos for cuota in c.get("cuotas", [])
-        )
-        saldo = sum(
-            cuota.get("saldo_por_pagar", 0)
-            for c in creditos for cuota in c.get("cuotas", [])
-        )
-        ahorrado = sum(i.get("monto_total_ahorrado", 0) for i in inversiones)
 
+        # Los importes se toman del bloque "analisis", que es el que materializa
+        # la logica del package: asi se compara contra Oracle el MISMO valor,
+        # no un recalculo paralelo hecho aqui.
         clientes[documento["nro_cliente"]] = {
             "nro_cliente": documento["nro_cliente"],
             "creditos": len(creditos),
@@ -293,25 +300,21 @@ def main():
         atlas = leer_atlas(base)
 
         # ------------------------------------------------------- comparacion
-        imprimir_encabezado = "  CONCEPTO"
         print("  CONCEPTO                                     ORACLE            ATLAS")
         print("  " + "-" * 88)
 
         todo_ok = True
 
         # Conteos de colecciones contra conteos de tablas.
-        conteos_tablas = {
-            "clientes": len(oracle["clientes"]),
-            "catalogos": len(oracle["clientes"]) * 0,  # se reemplaza abajo
-            "bitacora": oracle["bitacora"]["eventos"],
-            "procesos": 0,
-        }
         todo_ok &= imprimir_comparacion(
-            "Clientes", conteos_tablas["clientes"], atlas["conteos"]["clientes"]
+            "Clientes", len(oracle["clientes"]), atlas["conteos"]["clientes"]
+        )
+        todo_ok &= imprimir_comparacion(
+            "Catalogos maestro", oracle["catalogos"], atlas["conteos"]["catalogos"]
         )
         todo_ok &= imprimir_comparacion(
             "Eventos de bitacora",
-            conteos_tablas["bitacora"], atlas["conteos"]["bitacora"],
+            oracle["bitacora"]["eventos"], atlas["conteos"]["bitacora"],
         )
 
         # Importes de la cartera.

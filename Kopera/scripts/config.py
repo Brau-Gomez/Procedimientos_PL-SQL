@@ -38,13 +38,6 @@ COLECCION_CATALOGOS = "catalogos"
 COLECCION_BITACORA = "bitacora_pagos"
 COLECCION_PROCESOS = "procesos_mensuales"
 
-COLECCIONES = (
-    COLECCION_CLIENTES,
-    COLECCION_CATALOGOS,
-    COLECCION_BITACORA,
-    COLECCION_PROCESOS,
-)
-
 # Tiempo maximo de espera para elegir un servidor del cluster. Si se supera,
 # la conexion falla rapido en lugar de quedarse colgada.
 TIMEOUT_SERVIDOR_MS = 10000

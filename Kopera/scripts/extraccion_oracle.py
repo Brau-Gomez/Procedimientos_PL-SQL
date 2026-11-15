@@ -26,9 +26,12 @@ Puntos de diseno importantes:
    existe como columna: es un CASE en el package pk_analisis_kopera. Aqui se
    replica el mismo CASE para poder etiquetar cada cuota individual, que es un
    dato a nivel de cuota y no de cliente.
-"""
 
-import oracledb
+   El CASE usa TRUNC(SYSDATE), igual que fn_cuenta_cuotas del package: una
+   cuota que vence HOY todavia no esta vencida. Si se usara SYSDATE (con
+   hora), el conteo de cuotas embebidas con estado VENCIDA no coincidiria con
+   el bloque analisis.cuotas.vencidas, que viene de fn_cuenta_cuotas.
+"""
 
 # Nombre del package con la logica de negocio de la Evaluacion 2
 PACKAGE = "pk_analisis_kopera"
@@ -222,7 +225,7 @@ def extraer_cuotas(cursor):
                CASE
                    WHEN NVL(cu.saldo_por_pagar, cu.valor_cuota) = 0 THEN 'PAGADA'
                    WHEN NVL(cu.monto_pagado, 0) > 0                 THEN 'PARCIAL'
-                   WHEN cu.fecha_venc_cuota < SYSDATE               THEN 'VENCIDA'
+                   WHEN cu.fecha_venc_cuota < TRUNC(SYSDATE)       THEN 'VENCIDA'
                    ELSE 'PENDIENTE'
                END AS estado,
                {PACKAGE}.fn_dias_atraso(cu.nro_solic_credito, cu.nro_cuota) AS dias_atraso
@@ -383,7 +386,7 @@ def extraer_pagos_por_cliente(cursor):
                CASE
                    WHEN NVL(cu.saldo_por_pagar, cu.valor_cuota) = 0 THEN 'PAGADA'
                    WHEN NVL(cu.monto_pagado, 0) > 0                 THEN 'PARCIAL'
-                   WHEN cu.fecha_venc_cuota < SYSDATE               THEN 'VENCIDA'
+                   WHEN cu.fecha_venc_cuota < TRUNC(SYSDATE)       THEN 'VENCIDA'
                    ELSE 'PENDIENTE'
                END AS estado_cuota
           FROM bitacora_pago_cuota b

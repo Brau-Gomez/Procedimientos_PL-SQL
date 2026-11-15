@@ -6,9 +6,12 @@ Ejecuta las cuatro etapas del proceso en un solo comando:
     1. EXTRACCION   Oracle  ->  estructuras planas (set-based, sin loops).
     2. TRANSFORMACION  datos planos  ->  documentos NoSQL (limpieza de
        caracteres, anidado por agregado, reclasificacion a OPORTUNIDAD).
-    3. CARGA        documentos  ->  Atlas (colecciones con $jsonSchema + indices).
-    4. VALIDACION   se aplican las reglas de los triggers de Oracle sobre los
-       documentos migrados, y se emite el reporte final.
+    3. VALIDACION   se aplican las reglas de los triggers de Oracle sobre los
+       documentos migrados, y se emite el reporte de validacion.
+    4. CARGA        documentos  ->  Atlas (colecciones con $jsonSchema + indices).
+
+La validacion va ANTES de la carga a proposito: si un documento violara una
+regla no debe llegar a Atlas.
 
 Antes de ejecutar este script, la bitacora de Oracle debe estar poblada
 (Kopera/scripts/poblar_bitacora.py): el ETL refleja el estado ACTUAL de la
@@ -99,10 +102,12 @@ def transformar(datos, lineas_proceso):
 
     documentos_procesos = []
     if lineas_proceso:
-        clientes_analizados, saldo_total = transform.parsear_resumen_proceso(lineas_proceso)
         # Las lineas del informe tambien pasan por la limpieza: el package
-        # arma el nombre con los datos CRUDOS de Oracle.
+        # arma el nombre con los datos CRUDOS de Oracle. El resumen se parsea
+        # sobre las lineas YA limpiadas, para que el documento y los totales
+        # provengan del mismo texto.
         lineas_limpias = [transform.limpiar_texto(linea) for linea in lineas_proceso]
+        clientes_analizados, saldo_total = transform.parsear_resumen_proceso(lineas_limpias)
         documentos_procesos.append(
             transform.construir_documento_proceso(
                 lineas_limpias,
@@ -214,10 +219,10 @@ def main():
     print(f"  Documentos de proceso mensual      : {len(documentos['procesos'])}")
     print(f"  Clientes con texto sin corregir    : {len(documentos['observaciones'])}")
 
-    # ---------------------------------------------------------------- ETAPA 4
+    # ---------------------------------------------------------------- ETAPA 3
     # La validacion se hace ANTES de cargar: si un documento violara una regla
     # no debe llegar a Atlas.
-    imprimir_encabezado("ETAPA 4 - VALIDACION (reglas de los triggers de Oracle)")
+    imprimir_encabezado("ETAPA 3 - VALIDACION (reglas de los triggers de Oracle)")
     resumen_validacion, detalle_validacion = validar_documentos(documentos["clientes"])
     print(f"  Documentos validados               : {resumen_validacion['documentos_validados']}")
     print(f"  Documentos con errores             : {resumen_validacion['documentos_con_errores']}")
@@ -236,8 +241,8 @@ def main():
             if item["tipo"] == "ERROR":
                 print(f"    [ERROR] cliente {item['nro_cliente']}: {item['mensaje']}")
 
-    # ---------------------------------------------------------------- ETAPA 3
-    imprimir_encabezado("ETAPA 3 - CARGA en MongoDB Atlas")
+    # ---------------------------------------------------------------- ETAPA 4
+    imprimir_encabezado("ETAPA 4 - CARGA en MongoDB Atlas")
 
     if args.simular:
         print("  Modo simulacion: no se escribe nada en Atlas.")
