@@ -21,7 +21,7 @@ resuelve correctamente las variables locales, globales y libres (clausuras),
 a diferencia de una cuenta manual sobre el AST.
 
 Uso:
-    .venv/bin/python Kopera/scripts/revision_estatica.py
+    .venv/bin/python Kopera/etl/revision_estatica.py
 """
 
 import ast
@@ -148,10 +148,9 @@ def revisar_cadenas_danadas(ruta, texto):
 
 
 def _modulos_del_proyecto():
-    """Nombres de los modulos propios del proyecto (los .py de scripts/)."""
+    """Nombres de los modulos propios del proyecto (los .py de etl/)."""
     base = Path(__file__).resolve().parent
     modulos = {p.stem for p in base.glob("*.py")}
-    modulos |= {p.stem for p in (base / "etl-mongodb").glob("*.py")}
     return base, modulos
 
 
@@ -397,7 +396,6 @@ def revisar_modulo(ruta):
 def main():
     base = Path(__file__).resolve().parent
     archivos = sorted(base.glob("*.py"))
-    archivos += sorted((base / "etl-mongodb").glob("*.py"))
 
     total = 0
     for ruta in archivos:

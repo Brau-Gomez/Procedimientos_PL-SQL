@@ -20,8 +20,8 @@ El script es idempotente: al reejecutarse omite lo que ya esta pagado y lo
 informa en el reporte.
 
 Uso:
-    .venv/bin/python Kopera/scripts/poblar_bitacora.py --simular
-    .venv/bin/python Kopera/scripts/poblar_bitacora.py
+    .venv/bin/python Kopera/etl/poblar_bitacora.py --simular
+    .venv/bin/python Kopera/etl/poblar_bitacora.py
 """
 
 import argparse

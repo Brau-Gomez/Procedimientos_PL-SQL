@@ -1,7 +1,7 @@
 """
 Validaciones de negocio: replica en Python las reglas de los triggers de Oracle.
 
-Los triggers de la Evaluacion 2 (Kopera/procedimiento_pl-sql/04_triggers.sql)
+Los triggers de la Evaluacion 2 (Kopera/sql/04_triggers.sql)
 definen las reglas de integridad del negocio. En Atlas NO hay triggers (el tier
 M0 de Atlas no permite Atlas Triggers ni Functions), asi que esas reglas se
 replican en Python, en la capa de aplicacion.

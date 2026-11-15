@@ -11,7 +11,7 @@ La coleccion de prueba se descarta al final: no queda ningun documento de
 prueba en la base 'kopera'.
 
 Ejecucion:
-    .venv/bin/python Kopera/scripts/conexion_mongodb.py
+    .venv/bin/python Kopera/etl/conexion_mongodb.py
 """
 
 from config import (

@@ -20,7 +20,7 @@ import oracledb
 from pymongo import MongoClient
 from dotenv import load_dotenv
 
-# Raiz del repositorio: Kopera/scripts/config.py -> parents[2]
+# Raiz del repositorio: Kopera/etl/config.py -> parents[2]
 RAIZ = Path(__file__).resolve().parents[2]
 load_dotenv(dotenv_path=RAIZ / ".env")
 

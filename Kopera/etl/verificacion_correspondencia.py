@@ -17,8 +17,8 @@ Salida: un informe por pantalla (para el anexo del informe) y, con --archivo,
 un CSV con el detalle de las diferencias.
 
 Uso:
-    .venv/bin/python Kopera/scripts/verificacion_correspondencia.py
-    .venv/bin/python Kopera/scripts/verificacion_correspondencia.py --archivo docs/eva3/correspondencia.csv
+    .venv/bin/python Kopera/etl/verificacion_correspondencia.py
+    .venv/bin/python Kopera/etl/verificacion_correspondencia.py --archivo docs/eva3/correspondencia.csv
 """
 
 import argparse

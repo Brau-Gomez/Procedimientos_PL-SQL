@@ -14,13 +14,13 @@ La validacion va ANTES de la carga a proposito: si un documento violara una
 regla no debe llegar a Atlas.
 
 Antes de ejecutar este script, la bitacora de Oracle debe estar poblada
-(Kopera/scripts/poblar_bitacora.py): el ETL refleja el estado ACTUAL de la
+(Kopera/etl/poblar_bitacora.py): el ETL refleja el estado ACTUAL de la
 base, y los pagos cambian cuotas, saldos y clasificaciones.
 
 Uso:
-    .venv/bin/python Kopera/scripts/etl_principal.py --simular
-    .venv/bin/python Kopera/scripts/etl_principal.py
-    .venv/bin/python Kopera/scripts/etl_principal.py --sin-proceso
+    .venv/bin/python Kopera/etl/etl_principal.py --simular
+    .venv/bin/python Kopera/etl/etl_principal.py
+    .venv/bin/python Kopera/etl/etl_principal.py --sin-proceso
 """
 
 import argparse
@@ -306,7 +306,7 @@ def main():
     print(f"  Errores de reglas: {resumen_validacion['total_errores']} "
           f"(heredados de la semilla)")
     print()
-    print("  Siguiente paso: Kopera/scripts/crud_mongodb.py")
+    print("  Siguiente paso: Kopera/etl/crud_mongodb.py")
     return 0
 
 

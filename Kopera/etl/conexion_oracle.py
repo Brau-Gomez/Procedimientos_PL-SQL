@@ -14,7 +14,7 @@ formateado, no un result set tabular. pandas queda disponible para los scripts
 de extraccion y CRUD, donde si se trabalha con filas.
 
 Ejecucion:
-    .venv/bin/python Kopera/scripts/conexion_oracle.py
+    .venv/bin/python Kopera/etl/conexion_oracle.py
 """
 
 from config import conectar_oracle

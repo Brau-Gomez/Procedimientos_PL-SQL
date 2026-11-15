@@ -1,0 +1,62 @@
+/* ============================================================
+   CREACIÓN DE USUARIO ADMINISTRADOR, OPERADORES Y PERMISOS
+   Oracle Database
+   ============================================================
+
+   PLANTILLA — esta versión NO tiene la contraseña real, se puede
+   versionar. La clave se inyecta con la variable de sustitución
+   &ORACLE_PASSWORD.
+
+   Cómo usarla:
+
+   - En SQL Developer (F5) o en SQL*Plus, el script te PIDE el valor de
+     ORACLE_PASSWORD. Escribe ahí la misma clave que tengas en el .env
+     de la raíz (variable ORACLE_PASSWORD).
+
+   - O bien, copia este archivo como Kopera/CreacionUsuarios.sql
+     (ese archivo NO se versiona) y reemplaza &ORACLE_PASSWORD por la
+     clave literal.
+
+   Importante: la contraseña del usuario ADMIN_PROYECTO debe ser la
+   MISMA que ORACLE_PASSWORD en el .env de la raíz, porque es la que
+   usan los scripts de Python para conectarse (ver Kopera/etl/config.py).
+
+   ============================================================ */
+
+SET SERVEROUTPUT ON;
+
+/* ============================================================
+   1. CREACIÓN DEL USUARIO ADMINISTRADOR
+   ============================================================ */
+
+/* El DROP va dentro de un bloque PL/SQL para que el script sea
+   idempotente: si el usuario todavía no existe, el error -1918
+   (ORA-01918: user does not exist) se captura y no interrumpe la
+   ejecución. Así el mismo archivo sirve para la primera vez y para
+   las siguientes, sin tener que comentar la línea a mano. */
+BEGIN
+  EXECUTE IMMEDIATE 'DROP USER ADMIN_PROYECTO CASCADE';
+EXCEPTION
+  WHEN OTHERS THEN
+    IF SQLCODE != -1918 THEN
+      RAISE;
+    END IF;
+END;
+/
+
+CREATE USER ADMIN_PROYECTO IDENTIFIED BY "&ORACLE_PASSWORD"
+DEFAULT TABLESPACE USERS
+TEMPORARY TABLESPACE TEMP
+QUOTA UNLIMITED ON USERS;
+
+GRANT CREATE SESSION,
+      CREATE TABLE,
+      CREATE VIEW,
+      CREATE SEQUENCE,
+      CREATE PROCEDURE,
+      CREATE TRIGGER,
+      CREATE SYNONYM,
+      CREATE TYPE,
+      CREATE MATERIALIZED VIEW,
+      CREATE JOB
+TO ADMIN_PROYECTO;

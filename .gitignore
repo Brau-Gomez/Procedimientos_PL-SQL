@@ -12,8 +12,8 @@
 
 # El script de creacion de usuarios lleva la contrasena real del
 # usuario ADMIN_PROYECTO, La version sin
-# secreto es Kopera/procedimiento_pl-sql/CreacionUsuarios.sql.example.
-Kopera/procedimiento_pl-sql/sql_scripts/CreacionUsuarios.sql
+# secreto es Kopera/sql/base/CreacionUsuarios.sql.example.
+Kopera/sql/base/CreacionUsuarios.sql
 
 
 # ------------------------------------------------------------------
