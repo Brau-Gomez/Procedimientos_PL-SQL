@@ -1,0 +1,17 @@
+# Dependencias de la Evaluacion 3 (Oracle -> MongoDB Atlas).
+#
+# Las versiones van fijadas a proposito: el pipeline depende de dos
+# comportamientos concretos que cambiaron entre versiones mayores.
+#
+#   - pymongo: insert_many(ordered=False) levanta BulkWriteError y el detalle
+#     de los documentos rechazados vive en excepcion.details["writeErrors"].
+#   - oracledb: ConnectParams y el modo thin (sin Oracle Client instalado).
+#
+# Instalacion:
+#     python3 -m venv .venv
+#     source .venv/bin/activate
+#     pip install -r requirements.txt
+
+pymongo==4.19.0
+oracledb==26.1.0
+python-dotenv==1.2.4
