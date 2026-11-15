@@ -890,11 +890,36 @@ Tiene que salir la ruta de `python-dotenv`.
 Te falta el `SET SERVEROUTPUT ON;` al principio del script, o lo estás
 corrriendo en una sesión de SQL Developer sin habilitar la salida (Ctrl+B).
 
+### "the container name /oracle-free is already in use"
+
+Hay un contenedor `oracle-free` corriendo que pertenece a **otra copia** de
+este repo (o a una versión anterior del compose). Como el repo declara el
+nombre de proyecto `kopera` y el volumen `kopera_oracle_data`, todas las
+copias deberían usar **el mismo** contenedor: si aparece este error, es que
+quedó uno viejo de antes del cambio.
+
+Mirá quién lo tiene:
+
+```bash
+docker ps -a --filter name=oracle-free --format "{{.Names}} | {{.Status}}"
+```
+
+Y si está parado y no lo estás usando:
+
+```bash
+docker rm -f oracle-free
+docker compose up -d
+```
+
 ### No quiero perder los datos de Oracle
 
-`docker compose down` **no** borra los datos (viven en el volumen
-`oracle_data`). **Nunca** uses `docker compose down -v`: la `-v` sí borra el
-volumen y perdés la base entera.
+`docker compose down` **no** borra los datos: viven en el volumen
+`kopera_oracle_data`. **Nunca** uses `docker compose down -v`: la `-v` sí
+borra el volumen y perdés la base entera.
+
+Para perderlos de verdad tendrías que borrar el volumen a mano
+(`docker volume rm kopera_oracle_data`) y volver a correr los pasos 4, 5 y 6
+de esta guía.
 
 ---
 
