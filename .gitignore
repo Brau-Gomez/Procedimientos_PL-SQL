@@ -40,4 +40,4 @@ __pycache__/
 # Documentos de la evaluacion: NO se versionan
 # PDF, DOCX, PPTX, ZIP y guias quedan solo en local.
 # ------------------------------------------------------------------
-docs/
+docs/*

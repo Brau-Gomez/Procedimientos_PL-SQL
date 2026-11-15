@@ -1,3 +1,16 @@
+# Servicios del proyecto KOPERA.
+#
+# Las credenciales NO viven aqui: salen del archivo .env. Copia .env.example como .env y
+# completa los valores:
+#
+#     cp .env.example .env
+#
+# Docker Compose lee ese .env automaticamente para resolver las variables
+# ${...} de este archivo. La sintaxis ${VAR:?mensaje} aborta el arranque
+# con un mensaje claro si la variable falta o esta vacia, en vez de dejar
+# el contenedor con una contrasena vacia que fallaria mas tarde y sin
+# explicación.
+
 services:
   oracle:
     image: container-registry.oracle.com/database/free:latest
@@ -5,7 +18,10 @@ services:
     ports:
       - "1521:1521"
     environment:
-      ORACLE_PWD: "Duocsemestre#4"
+      # Contrasena del usuario SYS del contenedor. Debe ser la misma que
+      # ORACLE_PASSWORD del .env, porque ese usuario es el que se conecta
+      # despues como ADMIN_PROYECTO.
+      ORACLE_PWD: ${ORACLE_PASSWORD:?falta ORACLE_PASSWORD en el archivo .env de la raiz del repositorio}
     volumes:
       - oracle_data:/opt/oracle/oradata
     restart: unless-stopped
