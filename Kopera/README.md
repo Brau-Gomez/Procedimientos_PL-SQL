@@ -36,9 +36,11 @@ sql/
 ├── 03_package_analisis_kopera.sql   package + body
 ├── 04_triggers.sql              las 4 reglas automáticas
 ├── 05_pruebas_integracion.sql   pruebas de todo lo anterior
+├── ejecutar-sql.sh              corre un .sql sin instalar SQL Developer
 └── base/
     ├── CreacionUsuarios.sql.example   crea el usuario ADMIN_PROYECTO
     ├── BD_KOPERA.SQL                  tablas, relaciones y datos de ejemplo
+    ├── verificar.sql                  comprueba que todo quedó instalado
     └── resumen_financiero_kopera.sql  reporte financiero de solo lectura
 ```
 

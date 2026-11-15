@@ -27,7 +27,7 @@ automatización.
 |---|---|---|
 | 1 | `base/CreacionUsuarios.sql.example` | Crea el usuario `ADMIN_PROYECTO` (plantilla **sin** contraseña real) |
 | 2 | `base/BD_KOPERA.SQL` | Crea las 16 tablas, las secuencias y carga los datos de ejemplo |
-| 3 | — | *(opcional)* `base/resumen_financiero_kopera.sql`: reporte de solo lectura |
+| 3 | `base/verificar.sql` | *(opcional)* Comprueba que todo quedó instalado y bien |
 | 4 | `01_tablas_apoyo.sql` | Tabla de apoyo `BITACORA_PAGO_CUOTA` (auditoría de pagos) |
 | 5 | `02_procedimientos.sql` | `sp_reporte_cartera` y `sp_registra_pago` |
 | 6 | `03_package_analisis_kopera.sql` | El package `pk_analisis_kopera` (spec + body) |
@@ -39,7 +39,28 @@ automatización.
 
 ### Cómo ejecutar cada archivo
 
-**En SQL Developer** (lo más cómodo):
+**La forma más fácil: `./Kopera/sql/ejecutar-sql.sh`** (no necesitás instalar
+Oracle SQL Developer).
+
+```bash
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/01_tablas_apoyo.sql
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/02_procedimientos.sql
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/03_package_analisis_kopera.sql
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/04_triggers.sql
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/05_pruebas_integracion.sql
+```
+
+El script se encarga de todo lo molesto:
+
+| Se encarga de | Por qué |
+|---|---|
+| Leer la contraseña del `.env` | No tenés que escribirla en ningún archivo ni recordarla. |
+| Reemplazar `&ORACLE_PASSWORD` | Por lo que vale en tu `.env`. |
+| Pasarte `NLS_LANG=…AL32UTF8` | Para que los acentos se vean bien y no salgan como `An?lisis`. |
+| Avisarte si falta el contenedor | En vez de un error de sqlplus críptico. |
+| Validar que el archivo exista | Antes de intentar conectarte. |
+
+**La forma clásica: Oracle SQL Developer.**
 
 1. Conéctate al servicio `FREEPDB1` como `ADMIN_PROYECTO`.
 2. Abre el archivo.
@@ -99,10 +120,24 @@ literal, o deja la plantilla y escribe la clave cuando el script te la pida.
 > todos sus objetos** antes de recrearlo. Úsalo solo en este entorno
 > académico.
 
+### `base/verificar.sql`
+
+Comprueba la instalación completa en una sola corrida: los 8 objetos
+PL/SQL y su estado, la cantidad de tablas, los conteos de filas, que el
+package responda y que los triggers realmente rechacen un pago excedido.
+
+```bash
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/verificar.sql
+```
+
 ### `base/resumen_financiero_kopera.sql`
 
 Reporte financiero integrado, de **solo lectura**: no crea objetos ni
 modifica datos. Requiere que el esquema ya esté cargado.
+
+```bash
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/resumen_financiero_kopera.sql
+```
 
 ### `01_tablas_apoyo.sql`
 
@@ -178,18 +213,35 @@ Ejercita todo lo anterior en un solo bloque, con `DBMS_OUTPUT`:
 
 ## 4. Crear el usuario `ADMIN_PROYECTO`
 
-Tienes dos opciones:
+Tienes tres opciones:
 
-**a) Con la plantilla versionada** (`base/CreacionUsuarios.sql.example`):
+**a) Con el helper (la más fácil):**
+
+```bash
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/CreacionUsuarios.sql.example
+```
+
+Toma la contraseña del `.env` y la inyecta en el `&ORACLE_PASSWORD`.
+
+**b) Con la plantilla versionada** (`base/CreacionUsuarios.sql.example`):
 conéctate al servicio `FREEPDB1` como administrador de Oracle en SQL
 Developer y ejecuta el archivo con **F5**. El script te pide el valor de
 `ORACLE_PASSWORD`: escribe ahí la misma clave que pusiste en tu `.env`.
 
-**b) Con tu copia local**: copia la plantilla como
+**c) Con tu copia local**: copia la plantilla como
 `base/CreacionUsuarios.sql` (ese archivo **no se versiona**) y reemplaza
 `&ORACLE_PASSWORD` por la clave literal.
 
 ## 5. Verificar que quedó bien
+
+Lo más rápido es correr el script de verificación, que hace las cinco
+comprobaciones de una vez:
+
+```bash
+./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/verificar.sql
+```
+
+Si prefieres hacerlas a mano, estas son las consultas:
 
 ```sql
 SELECT object_type, status, COUNT(*)
