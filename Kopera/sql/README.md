@@ -75,6 +75,7 @@ El script se encarga de todo lo molesto:
 | Pasarte `NLS_LANG=…AL32UTF8` | Para que los acentos se vean bien y no salgan como `An?lisis`. |
 | Avisarte si falta el contenedor | En vez de un error de sqlplus críptico. |
 | Validar que el archivo exista | Antes de intentar conectarte. |
+| **Diagnosticar un `ORA-01017`** | Oracle usa el mismo error para "el usuario no existe" y para "la clave está mal". El helper consulta `cdb_users` para decirte cuál de los dos es. |
 
 **La forma clásica: Oracle SQL Developer.**
 

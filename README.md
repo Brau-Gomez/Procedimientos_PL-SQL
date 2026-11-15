@@ -197,6 +197,13 @@ La palabra **`healthy`** es la que importa. Si dice `starting`, todavía no
 está listo: espera un poco y vuelve a preguntar. Tarda entre 2 y 4 minutos
 desde cero.
 
+> 📦 **Sobre el volumen de datos.** El `docker-compose.yml` declara el
+> volumen con nombre explícito (`kopera_oracle_data`) a propósito. Sin eso,
+> Docker Compose deriva el nombre del volumen del **nombre de la carpeta**
+> donde estás, y si clonás el repo en otra carpeta te crea una base **vacía**
+> con otro nombre. Con el nombre fijo, todos los clones comparten la misma
+> base. El detalle está en la sección de problemas frecuentes.
+
 **Comprobación rápida** — entra a la base y mira la versión:
 
 ```bash
@@ -771,11 +778,49 @@ de memoria.
 
 ### `ORA-01017: invalid username/password`
 
-La clave del `.env` no es la misma que la del usuario. Recreá el usuario:
+Significa que **no se pudo entrar** a la base como `ADMIN_PROYECTO`. Tiene
+dos causas distintas, y Oracle no dice cuál es:
 
-```bash
-./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/CreacionUsuarios.sql.example
+| Causa | Qué hacer |
+|---|---|
+| El usuario **todavía no existe** (no corriste el Paso 4) | Crear el usuario: `./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/CreacionUsuarios.sql.example` |
+| El usuario existe pero la **clave del `.env` no coincide** | Corregir `ORACLE_PASSWORD` en el `.env`, o recrear el usuario |
+
+> El helper `ejecutar-sql.sh` **distingue los dos casos** y te dice cuál es,
+> en vez de dejarte con un `ORA-01017` a secas.
+
+### Cloné el repo en otra carpeta y la base aparece vacía
+
+**Este es el error más común y el más confuso.** Docker Compose deriva el
+nombre del volumen del **nombre de la carpeta** donde estás. Si clonás el
+repo en `/test/Procedimientos_PL-SQL` y ahí corrés `docker compose up -d`,
+te crea un volumen **nuevo y vacío** (`procedimientos_pl-sql_oracle_data`), y
+la base arranca sin tablas ni usuario: todo falla con `ORA-01017`.
+
+Por eso el `docker-compose.yml` de este repo declara el volumen con nombre
+explícito:
+
+```yaml
+volumes:
+  oracle_data:
+    name: kopera_oracle_data
 ```
+
+Con ese nombre fijo, **todos los clones comparten la misma base de datos**,
+importe desde dónde la levantes.
+
+> Si te pasó: el volumen con tus datos suele llamarse
+> `<nombre_de_la_carpeta>_oracle_data`. Para recuperarlo:
+>
+> ```bash
+> docker volume ls | grep oracle_data
+> ```
+>
+> y después mirá cuál tiene los datos (el que pesa más):
+>
+> ```bash
+> docker run --rm -v <volumen>:/d container-registry.oracle.com/database/free:latest du -sh /d/FREE
+> ```
 
 ### `ORA-01918: user 'ADMIN_PROYECTO' does not exist`
 

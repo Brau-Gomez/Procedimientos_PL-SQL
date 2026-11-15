@@ -27,4 +27,14 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Nombre EXPLICITO del volumen, a proposito.
+  #
+  # Sin esto, Docker Compose deriva el nombre del volumen del nombre de la
+  # CARPETA donde estas. Si clonás el repo en otra carpeta (por ejemplo
+  # /test/Procedimientos_PL-SQL), te crea un volumen NUEVO y vacio: la base
+  # arranca sin tablas y el usuario ADMIN_PROYECTO no existe, asi que todo
+  # falla con ORA-01017 "invalid credential" al conectar.
+  #
+  # Con el nombre fijo, todos los clones comparten la misma base de datos.
   oracle_data:
+    name: kopera_oracle_data
