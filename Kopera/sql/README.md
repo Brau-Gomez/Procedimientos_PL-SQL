@@ -50,6 +50,22 @@ Oracle SQL Developer).
 ./Kopera/sql/ejecutar-sql.sh Kopera/sql/05_pruebas_integracion.sql
 ```
 
+> **⚖️ ¿Extensión de SQL Developer o el helper?**
+>
+> No son excluyentes. Los dos ejecutan el **mismo archivo `.sql` en la misma
+> base**; lo que cambia es el camino y las herramientas alrededor.
+>
+> | | Extensión de SQL Developer | Helper `ejecutar-sql.sh` |
+> |---|---|---|
+> | **Cómo llega a la base** | Por TCP al puerto `1521` publicado | Por `docker exec`, entrando al contenedor |
+> | **Qué motor ejecuta** | Su driver de Oracle en tu PC | El `SQL*Plus` que ya viene adentro del contenedor |
+> | **Hay que instalar** | La extensión + un perfil de conexión | Nada |
+> | **Ideal para** | Explorar la base, correr solo un trozo del archivo, grilla de resultados, debug de PL/SQL | Correr los scripts completos del proyecto, automatizar |
+>
+> Usa la extensión para **explorar** (árbol de objetos, índices, constraints) y
+> para correr **un solo `SELECT`** que seleccionaste. Usa el helper para
+> **correr los scripts del proyecto** de punta a punta.
+
 El script se encarga de todo lo molesto:
 
 | Se encarga de | Por qué |

@@ -221,6 +221,31 @@ EOF"
 Oracle no deja crear usuarios sin permisos. El primero que hay que crear es
 `ADMIN_PROYECTO`, que es el "dueño" de todas las tablas del proyecto.
 
+> **⚖️ ¿Usás la extensión de SQL Developer o el helper?**
+>
+> Las dos formas sirven y **no son excluyentes**. El helper no reemplaza a la
+> extensión: es el camino para los que no la tienen instalada.
+>
+> | | Extensión de SQL Developer | Helper `ejecutar-sql.sh` |
+> |---|---|---|
+> | **Qué es** | Un IDE de SQL (cliente gráfico) | Un atajo de terminal |
+> | **Cómo llega a la base** | Por TCP al puerto `1521` publicado | Por `docker exec`, entrando al contenedor |
+> | **Qué motor ejecuta** | Su driver de Oracle en tu PC | El `SQL*Plus` que ya viene **adentro** del contenedor |
+> | **Hay que instalar** | La extensión + configurar un perfil de conexión | Nada |
+> | **Interfaz** | Árbol de objetos, grilla de resultados, historial | Texto en la terminal |
+>
+> **Usa la extensión si** querés explorar la base (ver tablas, índices y
+> constraints sin escribir consultas), correr **solo un trozo** de un archivo
+> (seleccionás el `SELECT` y le das F5), ver los resultados en grilla, o
+> depurar PL/SQL con breakpoints.
+>
+> **Usa el helper si** vas a **correr los scripts del proyecto** (los del
+> PL/SQL, `verificar.sql`), si **no tenés** la extensión instalada, o si
+> querés automatizar algo (es un comando, se puede meter en un script).
+>
+> Los dos terminan ejecutando el **mismo archivo `.sql` en la misma base**:
+> lo que cambia es el camino y las herramientas alrededor.
+
 **Opción A — Sin instalar nada (la más fácil).** El contenedor ya trae
 SQL\*Plus adentro, así que usamos el script `ejecutar-sql.sh`:
 
@@ -247,6 +272,9 @@ escribirla en ningún archivo.
 > conéctate al servicio `FREEPDB1` como administrador de Oracle, abre
 > `Kopera/sql/base/CreacionUsuarios.sql.example` y presioná **F5**. Cuando
 > pida `ORACLE_PASSWORD`, escribe la misma clave que pusiste en el `.env`.
+>
+> Ojo: la extensión **necesita el puerto `1521` publicado** (el compose ya lo
+> hace). El helper no lo necesita: entra por `docker exec`.
 
 > ⚠️ **Ojo:** el script **borra** el usuario `ADMIN_PROYECTO` con `CASCADE`
 > antes de recrearlo. Si lo corrés de nuevo, se borran también todas las
@@ -827,6 +855,7 @@ volumen y perdés la base entera.
 | Poner las credenciales | `.env` (plantilla: `.env.example`) |
 | Entender las variables | `Kopera/etl/config.py` |
 | Conectarme a Oracle | `Kopera/sql/ejecutar-sql.sh` |
+| Comprobar que la base quedó bien | `Kopera/sql/base/verificar.sql` |
 
 ### Para la base de datos (Evaluación 2)
 
@@ -885,7 +914,7 @@ volumen y perdés la base entera.
 │   ├── README.md                índice del proyecto
 │   ├── sql/                     Evaluación 2 — Oracle y PL/SQL
 │   │   ├── README.md            ← instrucciones de ejecución del PL/SQL
-│   │   ├── ejecutar-sql.sh      ← corre un .sql sin instalar SQL Developer
+│   │   ├── ejecutar-sql.sh      ← atajo para correr los .sql desde la terminal
 │   │   ├── 01_tablas_apoyo.sql
 │   │   ├── 02_procedimientos.sql
 │   │   ├── 03_package_analisis_kopera.sql
