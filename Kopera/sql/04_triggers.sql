@@ -1,6 +1,6 @@
 /*
   Proyecto KOPERA – reglas automáticas de integridad y auditoría.
-  Prerrequisitos: BD_KOPERA.SQL y eva2/01_tablas_apoyo.sql.
+  Prerrequisitos: base/BD_KOPERA.SQL y 01_tablas_apoyo.sql.
   Ejecutar como ADMIN_PROYECTO. Los triggers no hacen COMMIT.
 */
 BEGIN

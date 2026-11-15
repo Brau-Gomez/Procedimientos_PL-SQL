@@ -1,7 +1,7 @@
 /*
   Proyecto KOPERA – análisis mensual de cartera.
 
-  Prerrequisitos: BD_KOPERA.SQL y eva2/01_tablas_apoyo.sql.
+  Prerrequisitos: base/BD_KOPERA.SQL y 01_tablas_apoyo.sql.
   Ejecución: correr completo con F5 como ADMIN_PROYECTO.
   Las funciones quedan dentro del package para mantener una sola lógica.
 */
