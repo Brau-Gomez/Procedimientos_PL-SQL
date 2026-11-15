@@ -1,0 +1,14 @@
+[theme]
+# Azul institucional como base, naranja como acento de accion/atencion.
+primaryColor = "#E8722C"
+backgroundColor = "#F7F9FC"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0B2E4F"
+font = "sans serif"
+
+[server]
+headless = true
+fileWatcherType = "auto"
+
+[browser]
+gatherUsageStats = false

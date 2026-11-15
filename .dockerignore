@@ -1,0 +1,14 @@
+# Archivos que NO se envian como contexto de build.
+# Sin esto, Docker empaquetaria .venv y docs en cada `docker compose build`.
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+docs
+*.env
+KOPERA_EP3_scripts
+*.zip
+*.pptx
+*.docx
+*.pdf
