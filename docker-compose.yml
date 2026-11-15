@@ -11,6 +11,18 @@
 # el contenedor con una contrasena vacia que fallaria mas tarde y sin
 # explicación.
 
+# Nombre EXPLICITO del proyecto de Docker Compose.
+#
+# Sin esto, Compose deriva el nombre del proyecto del nombre de la CARPETA
+# donde estas, y el mismo repo clonado en dos carpetas se convierte en dos
+# proyectos distintos. Con el nombre fijo, ambos clones son el MISMO
+# proyecto: comparten los contenedores y el volumen, y `docker compose up -d`
+# desde cualquiera de los dos reutiliza el contenedor que ya esta corriendo.
+#
+# El compose de la app web usa su propio nombre (kopera-app) para que sus
+# contenedores no se mezclen con estos.
+name: kopera
+
 services:
   oracle:
     image: container-registry.oracle.com/database/free:latest
@@ -27,14 +39,23 @@ services:
     restart: unless-stopped
 
 volumes:
-  # Nombre EXPLICITO del volumen, a proposito.
+  # Volumen COMPARTIDO entre todos los clones del repo.
   #
-  # Sin esto, Docker Compose deriva el nombre del volumen del nombre de la
-  # CARPETA donde estas. Si clonás el repo en otra carpeta (por ejemplo
-  # /test/Procedimientos_PL-SQL), te crea un volumen NUEVO y vacio: la base
-  # arranca sin tablas y el usuario ADMIN_PROYECTO no existe, asi que todo
-  # falla con ORA-01017 "invalid credential" al conectar.
+  # Por que con nombre explicito:
+  #   Docker Compose deriva el nombre del volumen del nombre de la CARPETA
+  #   donde estas. Si clonás el repo en otra carpeta (por ejemplo
+  #   /test/Procedimientos_PL-SQL), te crea un volumen NUEVO y vacio: la base
+  #   arranca sin tablas y el usuario ADMIN_PROYECTO no existe, asi que todo
+  #   falla con ORA-01017 "invalid credential" al conectar.
+  #   Con el nombre fijo, todos los clones comparten la misma base de datos.
   #
-  # Con el nombre fijo, todos los clones comparten la misma base de datos.
+  # Por que external: true:
+  #   el volumen tiene que existir ANTES de levantar el compose, porque es
+  #   compartido y no debe depender de qué proyecto lo creó primero.
+  #   Se crea una sola vez (el comando es idempotente, si ya existe no hace
+  #   nada):
+  #
+  #       docker volume create kopera_oracle_data
   oracle_data:
     name: kopera_oracle_data
+    external: true

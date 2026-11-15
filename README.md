@@ -167,6 +167,15 @@ grep ORACLE_USER .env
 
 ### Paso 3 · Levanta la base de datos Oracle
 
+Crea el volumen de datos (una sola vez; el comando es idempotente, si ya
+existe no hace nada y no borra nada):
+
+```bash
+docker volume create kopera_oracle_data
+```
+
+Después levanta el contenedor:
+
 ```bash
 docker compose up -d
 ```

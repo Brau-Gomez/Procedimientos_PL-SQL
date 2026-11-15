@@ -10,6 +10,11 @@
 #   docker compose -f docker-compose.app.yml down
 #
 # Abrir en: http://localhost:8501
+# Nombre EXPLICITO del proyecto de Docker Compose, para que los
+# contenedores de la app no se mezclen con los de Oracle (que usan el
+# proyecto "kopera"). Ver la nota de docker-compose.yml.
+name: kopera-app
+
 services:
   web:
     build:
