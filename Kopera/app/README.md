@@ -69,7 +69,7 @@ Kopera/app/
 `Kopera/etl/validaciones.py` (réplica de los triggers) y
 `Kopera/etl/transformacion.py` (`recalcular_analisis`). El compose monta
 esa carpeta como `/etl` en modo lectura, así la app y el ETL nunca divergen.
-Nunca se importa `scripts/config.py`, que arrastra el driver de Oracle.
+Nunca se importa `Kopera/etl/config.py`, que arrastra el driver de Oracle.
 
 ## Colecciones que consume
 

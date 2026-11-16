@@ -104,5 +104,5 @@ app/
 > `validaciones.py` **solo** porque MongoDB Atlas M0 no tiene triggers. La app
 > web importa esa misma réplica en vez de reescribirla.
 >
-> Si someday la app y el ETL dicen cosas distintas, el error está en una
+> Si algún día la app y el ETL dicen cosas distintas, el error está en una
 > copia: en `validaciones.py` o en `transformacion.py`.

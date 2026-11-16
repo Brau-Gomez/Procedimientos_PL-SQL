@@ -186,23 +186,27 @@ ETAPA 1 - EXTRACCION
   Cuotas                             : 519
   Inversiones                        : 134
   Movimientos                        : 345
+  Eventos de bitacora                : 22
+  Lineas del proceso mensual         : 261
 
 ETAPA 2 - TRANSFORMACION
   Documentos de cliente              : 130
   Cuotas embebidas                   : 519 (de 519 en Oracle)
   Movimientos embebidos              : 345 (de 345 en Oracle)
-  Pagos embebidos en el cliente      : 23
+  Pagos embebidos en el cliente      : 22
   Documentos de catalogo             : 51   (10 productos, 5 créditos, 3 formas
                                              de pago, 2 tipos de movimiento,
                                              5 aportes SBIF, 23 profesiones,
                                              3 tipos de contrato)
-  Documentos de bitacora             : 23   eventos de pago
+  Documentos de bitacora             : 22   eventos de pago
   Documentos de proceso mensual      : 1    informe mensual
   Clientes con texto sin corregir    : 0
 
 ETAPA 3 - VALIDACION
   Documentos validados               : 130
   Documentos con errores             : 1
+  Documentos con observaciones        : 130
+  Total de errores                   : 3
   Total de observaciones              : 139
 ```
 

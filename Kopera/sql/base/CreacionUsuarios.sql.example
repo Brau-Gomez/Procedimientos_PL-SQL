@@ -13,9 +13,9 @@
      ORACLE_PASSWORD. Escribe ahí la misma clave que tengas en el .env
      de la raíz (variable ORACLE_PASSWORD).
 
-   - O bien, copia este archivo como Kopera/CreacionUsuarios.sql
-     (ese archivo NO se versiona) y reemplaza &ORACLE_PASSWORD por la
-     clave literal.
+   - O bien, copia este archivo como
+     Kopera/sql/base/CreacionUsuarios.sql (ese archivo NO se versiona) y
+     reemplaza &ORACLE_PASSWORD por la clave literal.
 
    Importante: la contraseña del usuario ADMIN_PROYECTO debe ser la
    MISMA que ORACLE_PASSWORD en el .env de la raíz, porque es la que

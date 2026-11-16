@@ -84,22 +84,24 @@ aunque apagues el contenedor.
 
 ## 2. Antes de empezar
 
-**Solo necesitas instalar Docker Desktop.** Todo lo demás va en Docker o se
-instala con un comando.
+**Solo hace falta instalar dos cosas:** Docker Desktop y Python. Todo lo
+demás va en Docker o se instala con un comando.
 
 | Necesitas | Cómo | Link |
 |---|---|---|
 | Docker Desktop | Descárgalo e instálalo. En Linux basta con Docker Engine + el plugin de Compose. | <https://www.docker.com/products/docker-desktop/> |
+| Python 3.10 o superior | Lo pide el ETL (Paso 9). En Linux/macOS suele venir instalado. | <https://www.python.org/downloads/> |
 
-Comprueba que quedó instalado:
+Comprueba que quedaron instalados:
 
 ```bash
 docker --version
 docker compose version
+python3 --version
 ```
 
-**Deberías ver** las dos versiones. Si el comando no existe, Docker no está
-instalado o no está en el PATH: reinicia la terminal o reinicia el
+**Deberías ver** las tres versiones. Si algún comando no existe, ese programa
+no está instalado o no está en el PATH: reinicia la terminal o reinicia el
 computador.
 
 > **Necesitas una cuenta en MongoDB Atlas** (gratis). La creamos en el
@@ -144,7 +146,7 @@ ORACLE_PORT=1521
 ORACLE_SERVICE_NAME=FREEPDB1
 
 # ─── MONGODB ATLAS ─────────────────────────────────────────────────
-MONGODB_URI="mongodb+srv://USUARIO:CLAVE@cluster0.xxxxx.mongodb.net"   ← lo sales en el Paso 8
+MONGODB_URI="mongodb+srv://USUARIO:CLAVE@cluster0.xxxxx.mongodb.net"   ← lo sacas en el Paso 8
 MONGODB_DATABASE=kopera
 ```
 
@@ -153,6 +155,11 @@ MONGODB_DATABASE=kopera
 >   la entrecomillas, la terminal la corta y el programa se confunde.
 > - La contraseña de `ORACLE_PASSWORD` es la que vas a usar **para entrar a
 >   la base de datos**. Anótala: la vas a necesitar en el Paso 4.
+> - Esa misma clave es la de **`SYS` del contenedor** (Docker la pasa como
+>   `ORACLE_PWD`) y se fija la **primera vez que arranca** Oracle: si después
+>   la cambiás en el `.env`, el contenedor conserva la vieja. Para que
+>   `ADMIN_PROYECTO` use la nueva, volvé a correr el Paso 4 (ojo: eso borra el
+>   usuario con sus tablas).
 > - `MONGODB_URI` lo dejas por ahora: lo copias en el Paso 8.
 > - El archivo `.env` **nunca** se sube a Git. Es tu información privada.
 
@@ -198,8 +205,8 @@ docker compose ps
 **Deberías ver** una fila así:
 
 ```
-NAME          IMAGE                                          STATUS
-oracle-free   container-registry.oracle.com/database/free    Up 2 minutes (healthy)
+NAME          IMAGE                                                STATUS
+oracle-free   container-registry.oracle.com/database/free:latest    Up 2 minutes (healthy)
 ```
 
 La palabra **`healthy`** es la que importa. Si dice `starting`, todavía no
@@ -207,11 +214,14 @@ está listo: espera un poco y vuelve a preguntar. Tarda entre 2 y 4 minutos
 desde cero.
 
 > 📦 **Sobre el volumen de datos.** El `docker-compose.yml` declara el
-> volumen con nombre explícito (`kopera_oracle_data`) a propósito. Sin eso,
-> Docker Compose deriva el nombre del volumen del **nombre de la carpeta**
-> donde estás, y si clonás el repo en otra carpeta te crea una base **vacía**
-> con otro nombre. Con el nombre fijo, todos los clones comparten la misma
-> base. El detalle está en la sección de problemas frecuentes.
+> volumen con nombre explícito (`kopera_oracle_data`) y con
+> `external: true`, a propósito. Sin eso, Docker Compose deriva el nombre del
+> volumen del **nombre de la carpeta** donde estás, y si clonás el repo en
+> otra carpeta te crea una base **vacía** con otro nombre. Con el nombre fijo,
+> todos los clones comparten la misma base. Y como es `external`, Docker **no
+> lo crea**: tiene que existir antes, por eso el `docker volume create` de
+> arriba no es opcional. El detalle está en la sección de problemas
+> frecuentes.
 
 **Comprobación rápida** — entra a la base y mira la versión:
 
@@ -313,6 +323,11 @@ mensajes de carga de datos.
 Tarda un par de minutos: son 130 clientes con todos sus créditos, cuotas,
 inversiones y movimientos.
 
+> 📅 **Las fechas de la semilla son relativas.** El script no trae fechas
+> fijas: las calcula con `SYSDATE` (por ejemplo, un crédito de hace un año).
+> Así los datos nunca quedan con edades imposibles ni con cuotas vencidas por
+> años, no importa cuándo cargues la base.
+
 > ⚠️ **Ojo:** este script **borra las tablas antes de crearlas**. Si lo
 > volvés a correr, perdés los datos que hayas cargado.
 
@@ -386,6 +401,10 @@ TRIGGER          VALID           4
 
 === 2. Tablas en el esquema (esperado: 17) ===
 
+TABLAS
+----------
+17
+
 === 3. Datos de ejemplo (esperado: 130 / 25 / 519 / 134 / 345) ===
 
 TABLA                        FILAS
@@ -395,7 +414,7 @@ CREDITO_CLIENTE                   25
 CUOTA_CREDITO_CLIENTE            519
 PRODUCTO_INVERSION_CLIENTE       134
 MOVIMIENTO                       345
-BITACORA_PAGO_CUOTA               23
+BITACORA_PAGO_CUOTA               22
 
 === 4. El package responde (esperado: 130 clientes y una clasificacion) ===
 
@@ -413,8 +432,8 @@ Cinco comprobaciones:
 | 4 | Que el package responde | 130 clientes analizados |
 | 5 | Que los triggers rechazan un pago excedido | `ORA-20001` |
 
-> La bitácora marca 23 en vez de 0 porque ya corrieron los pagos. En una
-> instalación recién sembrada es 0.
+> La bitácora marca 22 en vez de 0 porque ya corrieron los pagos del Paso 11.
+> En una instalación recién sembrada es 0.
 >
 > Si algún objeto sale `INVALID` en vez de `VALID`, corré el archivo que lo
 > crea de nuevo: lo más probable es que se haya copiado mal.
@@ -591,27 +610,42 @@ Primero un ensayo (no escribe nada):
 
 ```
 ETAPA 1 - EXTRACCION desde Oracle
-  Fecha de corte (SYSDATE de Oracle) : 15/11/2026
+  Fecha de corte (SYSDATE de Oracle) : 2026-11-16 01:21:59
   Clientes                           : 130
   Creditos                           : 25
   Cuotas                             : 519
   Inversiones                        : 134
   Movimientos                        : 345
+  Eventos de bitacora                : 22
+  Lineas del proceso mensual         : 261
 
 ETAPA 2 - TRANSFORMACION a documentos NoSQL
   Documentos de cliente              : 130
   Cuotas embebidas                   : 519 (de 519 en Oracle)
   Movimientos embebidos              : 345 (de 345 en Oracle)
+  Pagos embebidos en el cliente      : 22
   Documentos de catalogo             : 51
-  Documentos de bitacora             : 23
+  Documentos de bitacora             : 22
   Documentos de proceso mensual      : 1
   Clientes con texto sin corregir    : 0
 
 ETAPA 3 - VALIDACION (reglas de los triggers de Oracle)
   Documentos validados               : 130
+  Documentos con errores             : 1
+  Documentos con observaciones        : 130
   Total de errores                   : 3
-  Total de observaciones              : 139
+  Total de observaciones             : 139
+  Errores por codigo                 : {'-20001': 3}
 ```
+
+La fecha de corte y las líneas del proceso mensual cambian según el día en que
+lo corras: lo que tiene que coincidir son los conteos.
+
+> ⚠️ **Los 3 errores son esperados.** Son inconsistencias **heredadas de la
+> semilla** (datos históricos que se cargaron sin pasar por los triggers), no
+> operaciones nuevas: las 3 cuotas del cliente 83, crédito 3007, tienen un pago
+> mayor que el valor de la cuota. El ETL las informa y **no bloquea** la carga.
+> Si además ves el bloque `[ERROR] cliente 83: ...`, es exactamente eso.
 
 Ahora la carga real:
 
@@ -626,19 +660,27 @@ ETAPA 4 - CARGA en MongoDB Atlas
 
   Colecciones eliminadas (recarga)  : 4
   Colecciones creadas                : 4
+  Colecciones con validador actualizado: 4
   Indices creados                    : 12
 
   coleccion                  recibidos  insertados  rechazados
-  ------------------------------------------------------
+  ----------------------------------------------------------
   clientes                        130         130           0
   catalogos                        51          51           0
-  bitacora_pagos                   23          23           0
+  bitacora_pagos                   22          22           0
   procesos_mensuales                1           1           0
+  ----------------------------------------------------------
+  TOTAL                                       202           0
 ```
 
 > **¿Por qué la bitácora va antes?** Porque los pagos cambian las cuotas, los
 > saldos y las clasificaciones. Si cargás en Atlas antes de cobrar, la copia
 > queda desactualizada respecto de Oracle.
+
+> **`procesos_mensuales` es un histórico**: cada corrida del ETL **agrega** un
+> documento en vez de reemplazar los anteriores. Por eso, si lo corrés varias
+> veces, esa colección va a tener más de 1 documento y la carga va a informar
+> «recibidos: 1, insertados: 1» igualmente.
 
 **11.3 — Verificar que todo calza**
 
@@ -649,18 +691,25 @@ ETAPA 4 - CARGA en MongoDB Atlas
 **Deberías ver** los 18 casos del CRUD y al final:
 
 ```
-CASOS: 18/18 | Integridad: OK | Restauración: OK
+  Casos ejecutados: 18 | cumplidos: 18 | fallidos: 0
+  Integridad de la base: OK
 ```
 
 ```bash
 .venv/bin/python Kopera/etl/verificacion_correspondencia.py
 ```
 
-**Deberías ver**:
+**Deberías ver** (resumido):
 
 ```
-CORRESPONDENCIA TOTAL
-  130/130 clientes coinciden en los 7 campos comparados
+  DETALLE CLIENTE POR CLIENTE
+  Clientes en Oracle: 130 | clientes en Atlas: 130
+  Clientes con diferencias: 0
+  Total de campos con diferencia: 0
+
+============================================================================================
+  RESULTADO: CORRESPONDENCIA TOTAL. No se perdio ningun dato en la migracion.
+============================================================================================
 ```
 
 ---
@@ -720,8 +769,8 @@ Ya tenés todo andando:
 
 | | | |
 |---|---|---|
-| ✅ | Oracle con 16 tablas, 130 clientes y el PL/SQL instalado | `localhost:1521` |
-| ✅ | Atlas con 4 colecciones cargadas (130 clientes, 51 catálogos, 23 bitácora, 1 proceso) | en la nube |
+| ✅ | Oracle con 17 tablas (16 + bitácora), 130 clientes y el PL/SQL instalado | `localhost:1521` |
+| ✅ | Atlas con 4 colecciones cargadas (130 clientes, 51 catálogos, 22 bitácora, 1 proceso) | en la nube |
 | ✅ | La interfaz web | <http://localhost:8501> |
 | ✅ | 60 pruebas unitarias en verde | |
 
@@ -802,6 +851,16 @@ dos causas distintas, y Oracle no dice cuál es:
 > `base/CreacionUsuarios.sql.example` el helper entra **como SYS** y cambia
 > de contenedor a `FREEPDB1` antes de correr el script.
 
+### `external volume "kopera_oracle_data" not found`
+
+El compose declara el volumen como `external: true`, así que Docker **no lo
+crea**: hay que crearlo una vez. Es el comando del Paso 3:
+
+```bash
+docker volume create kopera_oracle_data
+docker compose up -d
+```
+
 ### Cloné el repo en otra carpeta y la base aparece vacía
 
 **Este es el error más común y el más confuso.** Docker Compose deriva el
@@ -817,10 +876,13 @@ explícito:
 volumes:
   oracle_data:
     name: kopera_oracle_data
+    external: true
 ```
 
 Con ese nombre fijo, **todos los clones comparten la misma base de datos**,
-importe desde dónde la levantes.
+importe desde dónde la levantes. Y como es `external: true`, Docker **no lo
+crea solo**: tiene que existir antes con `docker volume create
+kopera_oracle_data` (Paso 3).
 
 > Si te pasó: el volumen con tus datos suele llamarse
 > `<nombre_de_la_carpeta>_oracle_data`. Para recuperarlo:
@@ -989,6 +1051,7 @@ de esta guía.
 ├── docker-compose.yml           Oracle Database Free (la clave sale del .env)
 ├── docker-compose.app.yml       interfaz web (Streamlit)
 ├── .env.example                 plantilla de credenciales (SÍ se versiona)
+├── .gitignore                   qué NO se versiona (.env, docs/, .venv/)
 ├── .dockerignore                qué NO se manda como contexto de build
 ├── requirements.txt             dependencias fijadas del ETL
 ├── requirements-dev.txt         lo que hace falta para correr las pruebas
@@ -1042,13 +1105,16 @@ de esta guía.
 │   ├── test_poblar_bitacora.py
 │   ├── test_transformacion.py
 │   └── test_validaciones.py
-└── docs/                        entregables de las evaluaciones (SOLO en local)
-    ├── eva2/
-    └── eva3/
+├── docs/                        (se crea solo si exportás algo; NO se versiona)
+│   ├── eva2/
+│   └── eva3/
+└── .venv/                       entorno virtual de Python (NO se versiona)
 ```
 
-> `docs/` está en `.gitignore`: los `.docx`, `.pptx`, `.pdf` y `.zip` de las
-> evaluaciones se quedan solo en la máquina, no se suben al repositorio.
+> `docs/` y `.venv/` están en `.gitignore`: los `.docx`, `.pptx`, `.pdf` y
+> `.zip` de las evaluaciones y el entorno virtual se quedan solo en tu
+> máquina. `docs/` ni siquiera existe hasta que generás un archivo ahí (por
+> ejemplo, el CSV de `verificacion_correspondencia.py --archivo`).
 
 ---
 

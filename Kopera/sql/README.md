@@ -119,6 +119,10 @@ Crea el modelo relacional completo y lo puebla (16 tablas):
 La semilla trae **130 clientes**, 25 créditos, 519 cuotas, 134 productos de
 inversión y 345 movimientos.
 
+> 📅 Las fechas de la semilla se calculan con `SYSDATE` (relativas al día en
+> que cargas), no están fijas en el archivo. Por eso los conteos siempre
+> cuadran y los datos no envejecen.
+
 > ⚠️ **Reejecutarlo borra los datos.** El script hace `DROP TABLE` de todo
 > antes de recrear. Si ya tienes la base cargada y solo quieres probar los
 > procedimientos, no lo vuelvas a correr.
@@ -308,7 +312,7 @@ UNION ALL SELECT 'BITACORA_PAGO_CUOTA', COUNT(*) FROM bitacora_pago_cuota;
 
 Esperado: `130`, `25`, `519`, `134`, `345`, y `0` en la bitácora recién
 sembrada (se llena después, con `sp_registra_pago` o con el proceso de
-cobranza del ETL: tras una corrida completa quedan 23 eventos).
+cobranza del ETL: tras una corrida completa quedan 22 eventos).
 
 En total, el esquema tiene **17 tablas**: las 16 del modelo de `BD_KOPERA.SQL`
 más `BITACORA_PAGO_CUOTA` de `01_tablas_apoyo.sql`.
