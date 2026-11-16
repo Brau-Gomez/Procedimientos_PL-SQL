@@ -43,6 +43,28 @@ for archivo in "$@"; do
     fi
 done
 
+# ------------------------------------------------- modo de conexion (SYS o usuario)
+#
+# El script de creacion de usuarios se ejecuta como SYS (as sysdba) y no como
+# ADMIN_PROYECTO. La primera vez ADMIN_PROYECTO todavia NO existe, asi que el
+# diagnostico previo de mas abajo abortaria con ORA-01017 antes de que el
+# script llegue a crear el usuario: un huevo y gallina que dejaba la
+# instalacion nueva sin poder pasar del Paso 4 de la guia.
+es_creacion_usuarios() {
+    case "$(basename "$1")" in
+        CreacionUsuarios.sql|CreacionUsuarios.sql.example) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ¿Alguno de los archivos del lote crea al usuario?
+CREA_USUARIOS=0
+for archivo in "$@"; do
+    if es_creacion_usuarios "$archivo"; then
+        CREA_USUARIOS=1
+    fi
+done
+
 # ------------------------------------------------------------- .env y clave
 ENV_FILE="$RAIZ/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -121,7 +143,12 @@ diagnosticar_conexion() {
     fi
 }
 
-diagnosticar_conexion
+# El diagnostico previo solo tiene sentido si el lote va a entrar como
+# ADMIN_PROYECTO. Si el lote crea al usuario, se omite: el usuario todavia no
+# existe y el diagnostico abortaria (ORA-01017) sin dejar ejecutar el script.
+if [[ "$CREA_USUARIOS" -eq 0 ]]; then
+    diagnosticar_conexion
+fi
 
 # --------------------------------------------------------------- ejecución
 for archivo in "$@"; do
@@ -133,12 +160,35 @@ for archivo in "$@"; do
     # quede escrita en ningun archivo.
     # El -L (logon once) evita que SQL*Plus reintente el login y se coma la
     # linea siguiente del script como si fuera la contrasena.
+    # La cadena de conexion depende del archivo: el de creacion de usuarios
+    # entra como SYS (as sysdba), el resto como ADMIN_PROYECTO.
+    # Ojo con las comillas del caso SYS: "/ as sysdba@servicio" tiene que
+    # llegarle a SQL*Plus como tres argumentos sueltos ("/", "as",
+    # "sysdba@servicio"). Entrecomillado como un solo argumento, SQL*Plus no
+    # lo entiende, muestra su ayuda y no se conecta.
+    #
+    # Y ojo con esto: una conexion SYSDBA aterriza SIEMPRE en CDB$ROOT,
+    # aunque el nombre de servicio sea el de una PDB. Para crear el usuario
+    # dentro de FREEPDB1 hay que cambiar de contenedor a mano, con
+    # "ALTER SESSION SET CONTAINER". Sin eso, el CREATE USER falla con
+    # ORA-65096 ("common user or role name must start with prefix C##"),
+    # porque en CDB$ROOT los usuarios comunes exigen el prefijo C##.
+    if es_creacion_usuarios "$archivo"; then
+        ARGUMENTOS_SQLPLUS="/ as sysdba@$SERVICIO"
+        PREAMBULO="ALTER SESSION SET CONTAINER = $SERVICIO;"
+    else
+        ARGUMENTOS_SQLPLUS="\"$USUARIO/\$CLAVE@localhost:1521/$SERVICIO\""
+        PREAMBULO=""
+    fi
     {
+        if [[ -n "$PREAMBULO" ]]; then
+            echo "$PREAMBULO"
+        fi
         echo "DEFINE ORACLE_PASSWORD = '$CLAVE'"
         cat "$archivo"
         echo "EXIT"
     } | docker exec -i -e CLAVE="$CLAVE" -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 "$CONTENEDOR" \
-        bash -lc "sqlplus -S -L \"$USUARIO/\$CLAVE@localhost:1521/$SERVICIO\"" || {
+        bash -lc "sqlplus -S -L $ARGUMENTOS_SQLPLUS" || {
             echo ""
             echo "ERROR: el script devolvió un error. Revisá el mensaje de arriba." >&2
             exit 1

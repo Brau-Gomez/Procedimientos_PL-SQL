@@ -240,6 +240,14 @@ Tienes tres opciones:
 
 Toma la contraseña del `.env` y la inyecta en el `&ORACLE_PASSWORD`.
 
+> **Cómo entra el helper en este archivo.** Para
+> `base/CreacionUsuarios.sql.example` el helper se conecta **como SYS**
+> (`as sysdba`) y cambia de contenedor a `FREEPDB1` antes de correr el
+> script. Es necesario porque en una instalación nueva `ADMIN_PROYECTO`
+> todavía no existe: entrar con ese usuario fallaría con `ORA-01017` y el
+> usuario nunca se crearía. En todos los demás archivos el helper entra
+> normalmente como `ADMIN_PROYECTO`.
+
 **b) Con la plantilla versionada** (`base/CreacionUsuarios.sql.example`):
 conéctate al servicio `FREEPDB1` como administrador de Oracle en SQL
 Developer y ejecuta el archivo con **F5**. El script te pide el valor de

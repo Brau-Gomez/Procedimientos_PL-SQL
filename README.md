@@ -797,6 +797,10 @@ dos causas distintas, y Oracle no dice cuál es:
 
 > El helper `ejecutar-sql.sh` **distingue los dos casos** y te dice cuál es,
 > en vez de dejarte con un `ORA-01017` a secas.
+>
+> El comando de la primera fila funciona aunque el usuario no exista: para
+> `base/CreacionUsuarios.sql.example` el helper entra **como SYS** y cambia
+> de contenedor a `FREEPDB1` antes de correr el script.
 
 ### Cloné el repo en otra carpeta y la base aparece vacía
 
