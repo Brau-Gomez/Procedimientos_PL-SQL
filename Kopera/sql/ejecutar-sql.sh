@@ -186,6 +186,11 @@ for archivo in "$@"; do
         fi
         echo "DEFINE ORACLE_PASSWORD = '$CLAVE'"
         cat "$archivo"
+        # Salto de linea antes del EXIT: si el .sql no termina en \n (como
+        # BD_KOPERA.SQL antes de este fix), el EXIT se pegaria a la ultima
+        # sentencia y SQL*Plus lo leeria como un bloque PL/SQL
+        # (PLS-00376: illegal EXIT/CONTINUE statement).
+        echo ""
         echo "EXIT"
     } | docker exec -i -e CLAVE="$CLAVE" -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 "$CONTENEDOR" \
         bash -lc "sqlplus -S -L $ARGUMENTOS_SQLPLUS" || {
