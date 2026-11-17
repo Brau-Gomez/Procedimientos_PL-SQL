@@ -16,6 +16,9 @@ rem  La clave se toma del .env, se pasa al contenedor como variable de
 rem  entorno y se define dentro de SQL*Plus: no queda escrita en ningun
 rem  archivo.
 rem
+rem  El script que crea al usuario (Paso 4) entra como SYS, igual que en
+rem  el .sh: no necesita que ADMIN_PROYECTO exista todavia.
+rem
 rem  Limitacion: si la clave tiene caracteres especiales de cmd (& | % ^
 rem  o comillas), usa SQL Developer o cambiala por una alfanumerica.
 rem ============================================================
@@ -55,6 +58,17 @@ for %%F in (%*) do if not exist "%%~F" (
     exit /b 1
 )
 
+rem ------------------------------------------------- modo de conexion
+rem El archivo que crea al usuario se ejecuta como SYS (as sysdba). La
+rem primera vez ADMIN_PROYECTO todavia NO existe, asi que el diagnostico
+rem de abajo abortaria con ORA-01017 antes de dejar crear el usuario.
+set "CREA_USUARIOS=0"
+for %%F in (%*) do (
+    if /i "%%~nxF"=="CreacionUsuarios.sql" set "CREA_USUARIOS=1"
+    if /i "%%~nxF"=="CreacionUsuarios.sql.example" set "CREA_USUARIOS=1"
+)
+if "%CREA_USUARIOS%"=="1" goto sin_diagnostico
+
 rem ---------------------------------------------------- diagnostico
 rem Se prueba la conexion antes de correr nada, para avisar si el usuario
 rem no existe o si la clave del .env no coincide (ORA-01017).
@@ -69,6 +83,7 @@ if errorlevel 1 goto error_conexion
 
 del "%DIAG%" >nul 2>&1
 
+:sin_diagnostico
 rem ------------------------------------------------------ ejecucion
 for %%F in (%*) do call :ejecutar "%%~F"
 goto fin
@@ -80,9 +95,24 @@ echo   Ejecutando: %~1
 echo ================================================================
 docker cp "%~1" "%CONTENEDOR%:/tmp/_kopera_script.sql" >nul
 if errorlevel 1 goto error_copia
+rem La cadena de conexion depende del archivo, igual que en el .sh.
+rem Ojo con SYS: "/ as sysdba@servicio" tiene que llegarle a SQL*Plus como
+rem tres argumentos sueltos, y una conexion SYSDBA aterriza en CDB$ROOT,
+rem por eso el ALTER SESSION SET CONTAINER antes del script.
+if /i "%~nx1"=="CreacionUsuarios.sql" goto conexion_sys
+if /i "%~nx1"=="CreacionUsuarios.sql.example" goto conexion_sys
+set "SQLPLUS_ARGS=%USUARIO%/$CLAVE@localhost:1521/%SERVICIO%"
+set "PREAMBULO="
+goto conexion_lista
+:conexion_sys
+set "SQLPLUS_ARGS=/ as sysdba@%SERVICIO%"
+set "PREAMBULO=ALTER SESSION SET CONTAINER = %SERVICIO%;"
+:conexion_lista
 rem El DEFINE inyecta la clave sin que este en el archivo .sql; el tr
 rem borra el CR de los archivos guardados con finales de linea Windows.
-docker exec -i -e CLAVE -e USUARIO -e SERVICIO -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 "%CONTENEDOR%" bash -lc "{ echo DEFINE ORACLE_PASSWORD = \'$CLAVE\'; tr -d '\r' < /tmp/_kopera_script.sql; echo EXIT; } | sqlplus -S -L $USUARIO/$CLAVE@localhost:1521/$SERVICIO"
+rem El echo vacio separa el EXIT de la ultima sentencia: si el .sql no
+rem termina en salto de linea, SQL*Plus leeria "...;EXIT" como un bloque.
+docker exec -i -e CLAVE -e USUARIO -e SERVICIO -e NLS_LANG=AMERICAN_AMERICA.AL32UTF8 "%CONTENEDOR%" bash -lc "{ echo '%PREAMBULO%'; echo DEFINE ORACLE_PASSWORD = \'$CLAVE\'; tr -d '\r' < /tmp/_kopera_script.sql; echo ''; echo EXIT; } | sqlplus -S -L %SQLPLUS_ARGS%"
 if errorlevel 1 goto error_sql
 goto :eof
 
