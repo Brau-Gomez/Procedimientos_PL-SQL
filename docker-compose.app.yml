@@ -22,7 +22,8 @@ services:
       dockerfile: Kopera/app/Dockerfile
     container_name: kopera-web
     ports:
-      - "8501:8501"
+      # Solo local: la app escribe en Atlas y no tiene autenticacion.
+      - "127.0.0.1:8501:8501"
     # MONGODB_URI y MONGODB_DATABASE salen del .env de la raiz (el mismo que
     # usa el ETL). Ese archivo esta en .gitignore.
     env_file:
