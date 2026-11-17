@@ -265,10 +265,7 @@ def main():
             documentos["procesos"] or None,
         )
 
-        print(f"  Colecciones eliminadas (recarga)  : {reporte['colecciones_eliminadas']}")
-        print(f"  Colecciones creadas                : {reporte['colecciones_creadas']}")
-        print(f"  Colecciones con validador actualizado: {reporte['colecciones_validadas']}")
-        print(f"  Indices creados                    : {reporte['indices_creados']}")
+        print(f"  Colecciones recargadas (intercambio): {reporte['colecciones_recargadas']}")
         print()
         print(f"  {'coleccion':<22} {'recibidos':>10} {'insertados':>11} {'rechazados':>11}")
         print("  " + "-" * 58)

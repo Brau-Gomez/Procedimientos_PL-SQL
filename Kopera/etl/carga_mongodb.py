@@ -11,9 +11,11 @@ Este modulo ESCRIBE en Atlas. Recibe los documentos ya transformados y:
 
 Decisiones de diseno:
 
-- IDEMPOTENCIA. Las colecciones clientes, catalogos y bitacora_pagos se borran
-  y se recargan en cada ejecucion: su fuente de verdad es Oracle, asi que lo
+- IDEMPOTENCIA. Las colecciones clientes, catalogos y bitacora_pagos se
+  recargan en cada ejecucion: su fuente de verdad es Oracle, asi que lo
   correcto es que reflejen el estado actual, no que acumulen versiones.
+  La recarga se hace por intercambio (se carga en <coleccion>_nueva y se
+  renombra al final), para que la app nunca vea una coleccion vacia.
   La coleccion procesos_mensuales NO se borra: es un historico de ejecuciones
   del proceso mensual y cada corrida agrega un documento nuevo.
 
@@ -290,85 +292,46 @@ INDICES = {
 # FUNCIONES
 # ==========================================================================
 
-def eliminar_colecciones(base, colecciones):
+def _preparar_procesos(base):
     """
-    Borra las colecciones indicadas (con sus indices) para recargar desde cero.
+    Crea (o actualiza el validador de) procesos_mensuales y su indice.
 
-    Se usa antes de insertar en clientes, catalogos y bitacora_pagos. La
-    coleccion de procesos NO se borra: es historico.
+    Es la unica coleccion que no se recarga por intercambio: guarda el
+    historico de corridas, asi que solo se crea (o se le actualiza el
+    validador) y se le agrega un documento por corrida.
     """
-    eliminadas = []
-    for nombre in colecciones:
-        if nombre in base.list_collection_names():
-            base[nombre].drop()
-            eliminadas.append(nombre)
-    return eliminadas
-
-
-def crear_colecciones(base):
-    """
-    Crea las colecciones con su validador $jsonSchema.
-
-    Si la coleccion ya existe, se actualiza el validador con el comando
-    collMod, que es la forma oficial de cambiar las reglas de validacion de
-    una coleccion existente.
-    """
-    existentes = set(base.list_collection_names())
-    creadas = []
-    actualizadas = []
-
-    for nombre, validador in VALIDADORES.items():
-        if nombre in existentes:
-            base.command(
-                "collMod",
-                nombre,
-                validator=validador,
-                validationLevel="strict",
-                validationAction="error",
-            )
-            actualizadas.append(nombre)
-        else:
-            base.create_collection(
-                nombre,
-                validator=validador,
-                validationLevel="strict",
-                validationAction="error",
-            )
-            creadas.append(nombre)
-
-    return creadas, actualizadas
-
-
-def crear_indices(base):
-    """Crea los indices de cada coleccion. Devuelve el total de indices."""
-    total = 0
-    for nombre, indices in INDICES.items():
-        if nombre in base.list_collection_names():
-            # create_indexes devuelve los nombres de los indices que quedaron
-            # activos: se cuentan los reales, no los solicitados.
-            total += len(base[nombre].create_indexes(indices))
-    return total
+    validador = VALIDADORES[COLECCION_PROCESOS]
+    if COLECCION_PROCESOS in base.list_collection_names():
+        base.command(
+            "collMod",
+            COLECCION_PROCESOS,
+            validator=validador,
+            validationLevel="strict",
+            validationAction="error",
+        )
+    else:
+        base.create_collection(
+            COLECCION_PROCESOS,
+            validator=validador,
+            validationLevel="strict",
+            validationAction="error",
+        )
+    # create_indexes devuelve los nombres de los indices que quedaron activos.
+    base[COLECCION_PROCESOS].create_indexes(INDICES_PROCESOS)
 
 
 def _errores_de_escritura(excepcion):
     """
-    Normaliza los errores de escritura de PyMongo.
+    Extrae los errores de un insert_many.
 
-    Hay dos formas distintas de fallo y conviene tratar las dos:
-      - WriteError (un solo documento): el detalle esta en excepcion.details,
-        con las claves index, code, errmsg y errInfo directamente.
-      - BulkWriteError (insert_many): el detalle esta en
-        excepcion.details["writeErrors"], que es una lista.
+    BulkWriteError trae el detalle en excepcion.details["writeErrors"], que es
+    una lista; nInserted dice cuantos documentos alcanzaron a entrar.
     """
     detalles = getattr(excepcion, "details", None) or {}
 
     lista = detalles.get("writeErrors")
     if isinstance(lista, list):
         return lista, detalles.get("nInserted", 0)
-
-    # WriteError individual: el propio detalle es el error.
-    if "errmsg" in detalles:
-        return [detalles], 0
 
     return [], 0
 
@@ -419,6 +382,47 @@ def insertar_documentos(coleccion, documentos):
             })
 
     return insertados, rechazados
+
+
+def _cargar_por_intercambio(base, nombre, documentos):
+    """
+    Carga en <nombre>_nueva y la intercambia con un rename atomico.
+
+    La coleccion viva nunca se borra antes de tener la nueva completa: si la
+    carga falla a medias o el validador rechaza un documento, no se intercambia
+    y la app sigue leyendo los documentos anteriores.
+
+    Devuelve (insertados, rechazados, intercambiada).
+    """
+    temporal = f"{nombre}_nueva"
+    if temporal in base.list_collection_names():
+        base[temporal].drop()
+
+    base.create_collection(
+        temporal,
+        validator=VALIDADORES[nombre],
+        validationLevel="strict",
+        validationAction="error",
+    )
+    # Los indices se crean antes de insertar para que viajen con la coleccion
+    # en el rename y el unico de RUN rechace duplicados como documento, no
+    # como excepcion al construir el indice.
+    base[temporal].create_indexes(INDICES[nombre])
+
+    insertados, rechazados = insertar_documentos(base[temporal], documentos)
+
+    if rechazados or insertados != len(documentos):
+        # Carga incompleta: se descarta la temporal y la viva queda intacta.
+        base[temporal].drop()
+        return insertados, rechazados, False
+
+    base.client.admin.command(
+        "renameCollection",
+        f"{base.name}.{temporal}",
+        to=f"{base.name}.{nombre}",
+        dropTarget=True,
+    )
+    return insertados, rechazados, True
 
 
 def _resumir_err_info(err_info):
@@ -487,38 +491,36 @@ def cargar_todo(base, documentos_clientes, documentos_catalogos,
     El reporte es el insumo del anexo del informe: muestra cuantos documentos
     entraron en cada coleccion y si el validador rechazo alguno.
     """
-    # 1. Limpieza: las colecciones que reflejan Oracle se recargan desde cero.
-    eliminadas = eliminar_colecciones(
-        base, [COLECCION_CLIENTES, COLECCION_CATALOGOS, COLECCION_BITACORA]
-    )
+    # procesos_mensuales es historico: se prepara una vez y solo se le agrega
+    # un documento por corrida. Las otras tres se crean dentro del intercambio.
+    _preparar_procesos(base)
 
-    # 2. Colecciones con validador
-    creadas, actualizadas = crear_colecciones(base)
-
-    # 3. Indices
-    total_indices = crear_indices(base)
-
-    # 4. Carga
     reporte = {
-        "colecciones_eliminadas": eliminadas,
-        "colecciones_creadas": creadas,
-        "colecciones_validadas": actualizadas,
-        "indices_creados": total_indices,
+        "colecciones_recargadas": [],
         "cargas": [],
         "total_insertados": 0,
         "total_rechazados": 0,
     }
 
+    # Las tres colecciones que reflejan Oracle se recargan por intercambio: la
+    # viva se reemplaza con un rename atomico, no se borra por adelantado.
     cargas = [
-        (COLECCION_CLIENTES, documentos_clientes),
-        (COLECCION_CATALOGOS, documentos_catalogos),
-        (COLECCION_BITACORA, documentos_bitacora),
+        (COLECCION_CLIENTES, documentos_clientes, True),
+        (COLECCION_CATALOGOS, documentos_catalogos, True),
+        (COLECCION_BITACORA, documentos_bitacora, True),
     ]
     if documentos_procesos:
-        cargas.append((COLECCION_PROCESOS, documentos_procesos))
+        cargas.append((COLECCION_PROCESOS, documentos_procesos, False))
 
-    for nombre, documentos in cargas:
-        insertados, rechazados = insertar_documentos(base[nombre], documentos)
+    for nombre, documentos, recargar in cargas:
+        if recargar:
+            insertados, rechazados, intercambiada = _cargar_por_intercambio(
+                base, nombre, documentos
+            )
+            if intercambiada:
+                reporte["colecciones_recargadas"].append(nombre)
+        else:
+            insertados, rechazados = insertar_documentos(base[nombre], documentos)
         reporte["cargas"].append({
             "coleccion": nombre,
             "recibidos": len(documentos),
