@@ -658,10 +658,7 @@ Ahora la carga real:
 ```
 ETAPA 4 - CARGA en MongoDB Atlas
 
-  Colecciones eliminadas (recarga)  : 4
-  Colecciones creadas                : 4
-  Colecciones con validador actualizado: 4
-  Indices creados                    : 12
+  Colecciones recargadas (intercambio): ['clientes', 'catalogos', 'bitacora_pagos']
 
   coleccion                  recibidos  insertados  rechazados
   ----------------------------------------------------------
