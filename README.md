@@ -273,7 +273,8 @@ Oracle no deja crear usuarios sin permisos. El primero que hay que crear es
 > lo que cambia es el camino y las herramientas alrededor.
 
 **Opción A — Sin instalar nada (la más fácil).** El contenedor ya trae
-SQL\*Plus adentro, así que usamos el script `ejecutar-sql.sh`:
+SQL\*Plus adentro, así que usamos el script `ejecutar-sql.sh` (en Windows es
+`Kopera\sql\ejecutar-sql.bat`, con los mismos argumentos):
 
 ```bash
 ./Kopera/sql/ejecutar-sql.sh Kopera/sql/base/CreacionUsuarios.sql.example

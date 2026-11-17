@@ -39,7 +39,8 @@ automatización.
 
 ### Cómo ejecutar cada archivo
 
-**La forma más fácil: `./Kopera/sql/ejecutar-sql.sh`** (no necesitás instalar
+**La forma más fácil: `./Kopera/sql/ejecutar-sql.sh`** en Linux/macOS, o
+**`Kopera\sql\ejecutar-sql.bat`** en Windows (no necesitás instalar
 Oracle SQL Developer).
 
 ```bash
@@ -50,12 +51,20 @@ Oracle SQL Developer).
 ./Kopera/sql/ejecutar-sql.sh Kopera/sql/05_pruebas_integracion.sql
 ```
 
+En **Windows** (cmd.exe), el `.bat` se usa igual, desde la raíz del
+repositorio:
+
+```bat
+Kopera\sql\ejecutar-sql.bat Kopera\sql\01_tablas_apoyo.sql
+Kopera\sql\ejecutar-sql.bat Kopera\sql\03_package_analisis_kopera.sql
+```
+
 > **⚖️ ¿Extensión de SQL Developer o el helper?**
 >
 > No son excluyentes. Los dos ejecutan el **mismo archivo `.sql` en la misma
 > base**; lo que cambia es el camino y las herramientas alrededor.
 >
-> | | Extensión de SQL Developer | Helper `ejecutar-sql.sh` |
+> | | Extensión de SQL Developer | Helper `ejecutar-sql.sh` / `.bat` |
 > |---|---|---|
 > | **Cómo llega a la base** | Por TCP al puerto `1521` publicado | Por `docker exec`, entrando al contenedor |
 > | **Qué motor ejecuta** | Su driver de Oracle en tu PC | El `SQL*Plus` que ya viene adentro del contenedor |

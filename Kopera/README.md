@@ -37,6 +37,7 @@ sql/
 ├── 04_triggers.sql              las 4 reglas automáticas
 ├── 05_pruebas_integracion.sql   pruebas de todo lo anterior
 ├── ejecutar-sql.sh              corre un .sql sin instalar SQL Developer
+├── ejecutar-sql.bat             lo mismo, para Windows (cmd.exe)
 └── base/
     ├── CreacionUsuarios.sql.example   crea el usuario ADMIN_PROYECTO
     ├── BD_KOPERA.SQL                  tablas, relaciones y datos de ejemplo

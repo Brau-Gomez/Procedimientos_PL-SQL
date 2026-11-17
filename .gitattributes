@@ -1,0 +1,3 @@
+# Los .bat se ejecutan en cmd.exe y necesitan finales de linea CRLF,
+# aunque se editen o se clonen desde Linux/macOS.
+*.bat text eol=crlf
